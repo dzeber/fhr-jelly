@@ -115,6 +115,44 @@ $(function() {
         });
     };
 
+
+    drawGraph = function(median) {
+        var graphData = getStartupTimeInfo();
+        var margin = {top: 20, right: 20, bottom: 30, left: 50};
+        var width = 700 - margin.left - margin.right;
+        // d3.select('.graph').style('height')
+        var height = 292 - margin.top - margin.bottom;
+        var x = d3.time.scale() .range([0+5, width-5]);
+        var y = d3.scale.linear() .range([height-10, 0+10]);        
+        var xAxis = d3.svg.axis() .scale(x) .orient("bottom").tickFormat(d3.time.format("%d-%b")).ticks(5);;
+        var yAxis = d3.svg.axis() .scale(y) .orient("left");
+            // .tickFormat(d3.time.format("%d/%b"));
+        var line = d3.svg.line()
+            .x(function(d) { return x(d.date); })
+            .y(function(d) { return y(d.avgTime); });
+        d3.select(".graph").style("background-color", "white");
+        var svg = d3.select(".graph").append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+        
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+        x.domain(d3.extent(graphData, function(d) { return d.date; }));
+        y.domain(d3.extent(graphData, function(d) { return d.avgTime; }));
+        svg.append("g")
+            .attr("class", "x axis")
+            .attr("transform", "translate(0," + height + ")")
+            .call(xAxis);
+        svg.append("g")
+            .attr("class", "y axis")
+            .call(yAxis);
+        svg.append("path")
+            .datum(graphData)
+            .attr("class", "line")
+            .attr("d", line);
+    };
+
+    
     $('#graph_all').click(function(event) {
         event.preventDefault();
         // Clear all currently active selectors
