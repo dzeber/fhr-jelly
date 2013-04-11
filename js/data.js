@@ -8,6 +8,59 @@ var ONE_DAY = 1000 * 60 * 60 * 24,
     // Is this the first load for the document?
     isFirstLoad = true;
 
+
+var GRAPH_DAY_WINDOW = 90,
+
+computeMedian = function(values){
+     // values is an array of numbers that can be ordered,see
+     // @https://gist.github.com/caseyjustus/1166258#comment-230983
+     values.sort( function(a,b) {return a - b;} );
+     var half = Math.floor(values.length/2);
+     if(values.length % 2)
+         return values[half];
+     else
+         return (values[half-1] + values[half]) / 2.0;
+},
+
+getStartupTimeInfo = function(){
+     // Retreives an object with as many entries as days, ignoring  org.mozilla.appSessions.current
+     var days                = payload.data.days;
+     var dateCutOff        = new Date( Date.now()  - GRAPH_DAY_WINDOW);
+     var        sortedDates        = sortDates(payload.data.days, false);
+     var graphData        = [];
+     for(var day in sortedDates){
+        var theDay                = sortedDates[day];
+        var currentDayAsDate        = new Date(theDay);
+        var dayObject           = days[theDay];
+        //Append data to graphData containers iff currentDayAsDate >= dateCuttOff
+        if( currentDayAsDate >= dateCutOff) {
+            var entry = { "date": 0, "times":[], "avgTime":0, "events": {'versionUpdate':0, "crashSubmitted":0 }  };
+            entry.date = currentDayAsDate ;
+            var sessionsInfo = dayObject['org.mozilla.appSessions.previous'];
+            if(typeof sessionsInfo == 'undefined'){
+                continue;
+            }
+            entry.times = sessionsInfo.firstPaint.map(function(x) {return  x/1000.0; });
+            entry.avgTime = computeMedian(entry.times);
+            // Event Info Starts Now
+            var events                = entry.events;
+            var versionInfo        = dayObject['org.mozilla.appInfo.versions'];
+            var crashInfo        = dayObject['org.mozilla.crashes.crashes'];
+            if(typeof versionInfo !== 'undefined'){
+                events.versionUpdate = 1;
+            }
+            if(typeof crashInfo !== 'undefined'){
+                events.crashSubmitted = crashInfo.submitted;
+            }
+            graphData.push(entry)
+        }
+     }
+     return graphData ;
+};
+
+
+
+
 // Converts the day passed to a Date object and checks
 // whether the current month is equal to the month of the
 // day argument passed.
