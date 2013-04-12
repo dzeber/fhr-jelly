@@ -95,7 +95,9 @@ $(function() {
         waitr = setTimeout(waitForPayload, 500);
     })();
 
-    var drawGraph = function(median) {
+//------------------------------------------
+    
+/*    var drawGraph = function(median) {
 
         var graphData = getAllStartupTimes(median),
             options = {
@@ -117,17 +119,97 @@ $(function() {
 
         // We are drawing a graph so show the Y-label
         $('.yaxis-label').show();
+    }, */
+    var drawGraph = function(median) {
+        if(median) {
+            drawAverageGraph();
+        } else {
+            drawAllGraph();
+        }
     },
-    clearSelectors = function(selector) {
-        var graphSelectors = $(selector).find('li a');
-
-        graphSelectors.each(function() {
-            $(this).removeClass('active');
-        });
+    
+    
+    drawAverageGraph = function() {
+        // Minimum height of y axis: 5 seconds. 
+        var Y_MIN_HEIGHT = 5, 
+            // Minimum number of dates on the x axis: 2 weeks. 
+            X_MIN_DAYS = Date.now() - TWO_WEEKS;
+            
+        // Padding sizes: 
+        // Space to allocate for the axes
+        var xAxisPadding = 20, 
+            yAxisPadding = 30,
+            // Padding between the left and right edges of the plot and the first and last days
+            datePadding = 10,
+            // Padding between the maximum value and the top edge of the plot
+            valuePadding = 10;
+    
+        // Dimensions are determined by container. 
+        var graphContainer = d3.select(".graph"), 
+            width = parseInt(graphContainer.style("width"), 10),
+            height = parseInt(graphContainer.style("height"), 10); 
+            
+        graphContainer.style("border", "1px solid black");
+           
+        var svg = graphContainer.append("svg:svg")
+            .attr("width", width + "px").attr("height", height + "px");
+        
+        // Add group for startup plot. 
+        var startup = svg.append("g")
+            .attr("transform", "translate(" + yAxisPadding + ", 0)");
+        
+        // startup.append("rect").style("stroke","blue")
+            // .attr("width",width-yAxisPadding).attr("height",height-xAxisPadding);
+    
+        var graphData = getAverageGraphData();
+        
+        var x = d3.time.scale()
+            // Allocate space from earliest date in the payload until today.
+            // If earliest date is less than two weeks ago, allocate space for two weeks. 
+            .domain([Math.min(X_MIN_DAYS, d3.min(graphData, function(d) { return d.date; })), Date.now()])
+            .range([0, width - yAxisPadding]);
+        
+        var y = d3.scale.linear()
+            // Allocate space from 0 to maximum value in dataset. 
+            // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
+            .domain([0, Math.max(Y_MIN_HEIGHT, d3.max(graphData, function(d) { return d.medTime; }))])
+            .range([height - xAxisPadding, 0]);
+        
+        // Add axes. 
+        var xAxis = d3.svg.axis()
+            .scale(x).orient("bottom");
+            
+        var yAxis = d3.svg.axis()
+            .scale(y).orient("left")
+            .ticks(5);
+            
+        startup.append("g")
+            .attr("class", "axis")
+            .attr("transform", "translate(0," + (height - xAxisPadding) + ")")
+            .call(xAxis);
+            
+        startup.append("g")
+            .attr("class", "axis")
+            .call(yAxis);
+        
+        // Add points. 
+        startup.selectAll(".dot")
+            .data(graphData).enter().append("circle")
+            .attr("class", "dot")
+            .attr("r", 3.5)
+            .attr("cx", function(d) { return x(d.date); })
+            .attr("cy", function(d) { return y(d.medTime); })
+        
+    },
+    
+    
+    drawAllGraph = function() {
+    
     };
+   
 
-
-    drawGraph = function(median) {
+    
+/*   drawGraph = function(median) {
         var graphData = getStartupTimeInfo();
         var margin = {top: 20, right: 20, bottom: 30, left: 50};
         var width = 700 - margin.left - margin.right;
@@ -162,7 +244,18 @@ $(function() {
             .attr("class", "line")
             .attr("d", line);
     };
+*/
 
+//------------------------------------------
+    
+    clearSelectors = function(selector) {
+        var graphSelectors = $(selector).find('li a');
+
+        graphSelectors.each(function() {
+            $(this).removeClass('active');
+        });
+    };
+    
     
     $('#graph_all').click(function(event) {
         event.preventDefault();

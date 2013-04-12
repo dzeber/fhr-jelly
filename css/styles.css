@@ -520,7 +520,17 @@ figcaption {
     font-size: .8rem;
     line-height: 1rem;
 }
+.axis text {
+    font-size: 10px;
+}
+.axis path, .axis line {
+    fill: none;
+    stroke: black;
+    shape-rendering: crispEdges;
+}
+.dot {
 
+}
 /* --- Panels --- */
 .panelContainer {
   position: absolute;
