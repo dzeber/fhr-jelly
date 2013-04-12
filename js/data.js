@@ -9,7 +9,7 @@ var ONE_DAY = 1000 * 60 * 60 * 24,
 
 //------------------------------------------
     
-var MAX_GRAPH_DAYS = 90,
+var MAX_GRAPH_DAYS = 90, 
 
 // Computes the median of a set of values.
 computeMedian = function(values){
