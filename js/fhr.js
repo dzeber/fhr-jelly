@@ -279,6 +279,8 @@ $(function() {
 		
         // graphContainer.style("border", "1px solid black");
 		
+		// Remove any previous plot, and add new plot svg container.  
+		graphContainer.selectAll("svg").remove();
 		var svg = graphContainer.append("svg:svg")
             .attr("width", containerWidth + "px").attr("height", containerHeight + "px"), 
 			// Add group for startup plot, to include startup times plot and both axes. 
