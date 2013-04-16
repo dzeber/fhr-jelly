@@ -154,10 +154,12 @@ $(function() {
 			// Height of crash indicator arrow
 			CRASH_ARROW_HEIGHT = 5,
 			// Width of crash indicator arrow as a proportion of crash indicator width. 
-			CRASH_ARROW_WIDTH_PROP = 0.5;
+			CRASH_ARROW_WIDTH_PROP = 0.5,
+			// Proportion of plot height that should be dedicated to outliers, if any. 
+			OUTLIER_PLOT_PROP = 0.3;
         
-    	// Padding sizes in px: 
-        // Space to allocate for the x axis (ticks and labels)
+    	// Sizes in px: 
+			// Space to allocate for the x axis (ticks and labels)
         var xAxisPadding = 25, 
 			// Padding allocated for the y axis with ticks, but excluding labels. 
             yAxisBasePadding = 10,
@@ -169,30 +171,27 @@ $(function() {
 			// Padding between the left and right edges of the plot and the first and last days
             datePadding = 20, 
 			// Vertical space to allocate for crash indicator
-			crashHeight = 25;
+			crashHeight = 25, 
+			// Vertical space to add between main plot and outlier plot, if any. 
+			outlierGap = 10, 
+			// Padding to add at top of entire plot - primarily to stop top axis label getting cut off. 
+			topPadding = 5;
+			
 			
 			
 		// Diagnostic. 
-		var inspectData = function(dataArray) {
-			for(var i=0; i < dataArray.length; i++) { 
-				var str = "";
-				for(var k in dataArray[i]) {
-					str += k + ": " + dataArray[i][k] + ",  ";
-				}
-				console.log(str);
-			}
-		};
+		// var inspectData = function(dataArray) {
+			// for(var i=0; i < dataArray.length; i++) { 
+				// var str = "";
+				// for(var k in dataArray[i]) {
+					// str += k + ": " + dataArray[i][k] + ",  ";
+				// }
+				// console.log(str);
+			// }
+		// };
 		
-    
-        // Dimensions are determined by container. 
-        var graphContainer = d3.select(".graph"), 
-            containerWidth = parseInt(graphContainer.style("width"), 10),
-            containerHeight = parseInt(graphContainer.style("height"), 10); 
-            
-        // graphContainer.style("border", "1px solid black");
 		
-		var svg = graphContainer.append("svg:svg")
-            .attr("width", containerWidth + "px").attr("height", containerHeight + "px");
+		//--------------------------------
 		
 		// Retrieve data to be plotted. 
 		var graphData = getAverageGraphData();
@@ -203,16 +202,17 @@ $(function() {
 		// (means that there was no appSessions.previous for that day). 
 		var startupData = graphData.filter(function(d) { return typeof d.medTime !== "undefined" && d.medTime !== null; });
 		
-		// Detect outliers. 
-		var outlyingDates = (function(data) {
+		// Outlier detection. 
+		// Output will be an array containing indices of elements in the original array that should be considered outliers, if any. 
+		var outliers = (function(data) {
 			// The number of values flagged as outliers should not be more than this proportion of the data. 
 			var MAX_PROP_OUTLIERS = 0.1;
 			// A value is flagged as an outlier if its gap is larger than this proportion of the maximum value. 
 			var MAX_GAP_PROP = 0.7;
+			// var MAX_GAP_PROP = 0.51;
 			
-			var i;
+			var i, _data = data.map(function(d) { return d.value; });
 			data = data.sort(function(a,b) { return a.value - b.value; });
-			// inspectData(data);
 			
 			var gaps = [];
 			// Compute differences between consecutive sorted values. 
@@ -220,9 +220,6 @@ $(function() {
 			for(i=1; i < data.length; i++) {
 				gaps.push(data[i].value - data[i-1].value);
 			}
-			// console.log(gaps);
-			// data.splice(0,1);
-			// inspectData(data);
 			
 			// This will now be the index of the highest value in data currently not flagged as an outlier. 
 			var upper = data.length - 1;
@@ -248,39 +245,94 @@ $(function() {
 				}
 			}
 			
-			var dates = []; 
+			var outlierIndices = [];
 			for( ; cutPoint < data.length; cutPoint++) {
-				dates.push(data[cutPoint].date);
+				outlierIndices.push(_data.indexOf(data[cutPoint].value));
 			}
 			
-			// inspectData(dates);
-			// console.log(dates)
-			// alert(dates);
-			return dates;
+			return outlierIndices;
 			
 		})(startupData.map(function(d) { return { date: d.date, value: d.medTime }; }));
 		
-		// inspectData(graphData);
+			
+		// If there are outliers, isolate the outlier data. 
+		var outlierData = [];
+		if(outliers.length > 0) { 
+			outliers.forEach(function(d) { 
+				outlierData.push(startupData.splice(d, 1)[0]);
+			});
+		}
 		
-		// Compute y axis padding dynamically according to the number of digits in the labels. 
-		// There is probably a better way to do this. 
-		yAxisPadding += perDigitPadding * Math.floor(d3.max(graphData, function(d) { return d.medTime; })).toString().length;
+		// TODO: 
+		// If outliers: plot outliers; compute plotHeight accordingly; and generate main plot (everything should scale accordingly).
+		// Otherwise, compute plotHeight to fill entire space and generate main plot. 
 		
-        // Add group for startup plot. 
-		// Includes startup times plot and both axes. 
-		// Height is containerHeight - crashHeight
-		// Width is containerWidth. 
-        var startup = svg.append("g")
-			.attr("transform", "translate(" + yAxisPadding + ", 0)");
+		
+		//--------------------------------
+		
+		
+		// Dimensions are determined by container. 
+        var graphContainer = d3.select(".graph"), 
+            containerWidth = parseInt(graphContainer.style("width"), 10),
+            containerHeight = parseInt(graphContainer.style("height"), 10), 
+			plotHeight = containerHeight - xAxisPadding- crashHeight - topPadding;	
+		
+        // graphContainer.style("border", "1px solid black");
+		
+		var svg = graphContainer.append("svg:svg")
+            .attr("width", containerWidth + "px").attr("height", containerHeight + "px"), 
+			// Add group for startup plot, to include startup times plot and both axes. 
+			startup = svg.append("g").attr("transform", "translate(0, " + topPadding + ")");
+			
+			
+		//--------------------------------
+			
+			
+		// Compute the y scale first and generate the axis. 
+		// Use the sizes of the tick labels to compute the amount of padding to leave for the y axis. 
+		var y = d3.scale.linear()
+            // Allocate space from 0 to maximum value in dataset. 
+            // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
+            .domain([0, Math.max(Y_MIN_HEIGHT, d3.max(graphData, function(d) { return d.medTime; }))])
+            .range([plotHeight, plotTopPadding]); 
+		// Update scale to incorporate extra space at the top. 
+		y.domain([0, y.invert(0)]).range([plotHeight, 0]);
+			
+		var yAxis = d3.svg.axis()
+            .scale(y).orient("left")
+            .ticks(Y_NUM_TICKS); 
+		
+		startup.append("g")
+            .attr("class", "y axis")
+            .call(yAxis)
         
+		
+		// alert(yAxisPadding);
+		// Get the tick labels that will be displayed on the plot. 
+		var yTicks = [];
+		d3.selectAll(".y.axis text").each(function(d) { yTicks.push(d); });
+		// Compute y axis padding according to the maximum length of the labels. 
+		// There is probably a better way to do this - depends on font size.  
+		// alert(yTicks);
+		yAxisPadding += perDigitPadding * d3.max(yTicks, function(d) { return d.toString().length; });
+		
+		// alert(yTicks.map(function(d) { return d.toString().length; }));
+		// alert(d3.max(yTicks, function(d) { return d.toString().length; }));
+		
+		// alert(yAxisPadding);
+			
+		//--------------------------------
+			
+		
+		// Add padding to left of plot. 
+		startup.attr("transform", "translate(" + yAxisPadding + ", " + topPadding + ")");
+        
+		var plotWidth = containerWidth - yAxisPadding;
+		
+		
         // startup.append("rect").style("stroke","blue")
             // .attr("width",width-yAxisPadding).attr("height",height-xAxisPadding);
-    
-		var plotWidth = containerWidth - yAxisPadding, 
-			plotHeight = containerHeight - xAxisPadding
-				- crashHeight
-			;
-		
+ 
 		// Add background colour. 
 		startup.append("rect").attr("id", "startup")
 			.attr("width", plotWidth).attr("height", plotHeight);
@@ -295,24 +347,12 @@ $(function() {
 		// Update scale to add padding on the left and right. 
 		x.domain([x.invert(0), x.invert(plotWidth)]).range([0, plotWidth]);
         
-		// Set up scale for startup time values on y-axis. 
-        var y = d3.scale.linear()
-            // Allocate space from 0 to maximum value in dataset. 
-            // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
-            .domain([0, Math.max(Y_MIN_HEIGHT, d3.max(graphData, function(d) { return d.medTime; }))])
-            .range([plotHeight, plotTopPadding]); 
-		// Update scale to incorporate extra sapce at the top. 
-		y.domain([0, y.invert(0)]).range([plotHeight, 0]);
-			
-	
-		
-        // Add axes. 
+		// Add axes. 
 		// Main x-axis with ticks labelled according to prettiness. 
         var xAxis = d3.svg.axis()
             .scale(x).orient("bottom")
 			.tickFormat(d3.time.format("%b %d"));
 			
-		// console.log(xAxis.ticks());
 		
 		// Secondary x-axis to show unlabelled ticks for each day. 
 		// var xAxisSub = d3.svg.axis()
@@ -320,25 +360,25 @@ $(function() {
 			// .ticks(d3.time.days)
 			// .tickFormat("");
             
-        var yAxis = d3.svg.axis()
-            .scale(y).orient("left")
-            .ticks(Y_NUM_TICKS);
-            
+     
         startup.append("g")
             .attr("class", "x axis")
             .attr("transform", "translate(0," + plotHeight + ")")
             .call(xAxis)
 			// .append("g").call(xAxisSub);
             
-        startup.append("g")
+		// Remove and readd y axis so that it will be drawn on top of the background rect. 
+		startup.select(".y.axis").remove();
+		startup.append("g")
             .attr("class", "y axis")
-            .call(yAxis);
-        
+            .call(yAxis)
+		
+			
+		//--------------------------------
+			
+		
         // Add points. 
 		
-		
-		// inspectData(startupData);
-
 		// Scale the point radius according to the horizontal space allocated per day. 
 		var pointRadius = Math.min(Math.max(
 			(x(d3.time.day.offset(earliest, 1)) - x(earliest)) * POINT_DAY_PROP, 
@@ -351,13 +391,14 @@ $(function() {
             .attr("cx", function(d) { return x(d.date); })
             .attr("cy", function(d) { return y(d.medTime); })
         
-		// Group for crash indicator below x axis. 
-		// Dimensions are plotWidth x crashHeight.
+			
+		//--------------------------------
+			
+		// Add crash indicators. 		
+		
+		// Group for crash indicators below x axis. 
 		var crashes = svg.append("g").attr("transform", 
 			"translate(" + yAxisPadding + "," + (containerHeight - crashHeight) + ")");
-		
-		// crashes.append("rect").attr("width", plotWidth).attr("height", crashHeight)
-			// .style("fill", "beige");
 		
 		// Only retain dates with positive crash count. 
 		var crashData = graphData.filter(function(d) { return d.crashCount > 0; });
@@ -366,8 +407,7 @@ $(function() {
 		var pointWidth = Math.min((x(d3.time.day.offset(earliest, 1)) - x(earliest)) * CRASH_DAY_PROP, crashHeight - CRASH_ARROW_HEIGHT);
 		// Width of the base of the arrow. 
 		var arrowWidth = pointWidth * CRASH_ARROW_WIDTH_PROP;
-		
-		
+				
 		// Set up colour scale for crashes. 
 		var crashScale = d3.scale.linear()
 			// Cap maximum number of crashes to register on the scale. 
@@ -384,7 +424,6 @@ $(function() {
 			.attr("width", pointWidth).attr("height", crashHeight - CRASH_ARROW_HEIGHT)
 			.attr("rx", CRASH_RX)
 			.style("fill", function(d) { 
-				// console.log(d.crashCount + " : " + crashScale(d.crashCount));
 				return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
 			});
 		
