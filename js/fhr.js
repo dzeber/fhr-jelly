@@ -136,6 +136,8 @@ $(function() {
             X_MIN_DAYS = 14, 
 			// Desired number of ticks on the y axis 
 			Y_NUM_TICKS = 5,
+			// Desired number of ticks on the y axis for outliers
+			Y_NUM_TICKS_OUT = 2,
 			// Minimum point radius 
 			MIN_POINT_RAD = 2.5,  
 			// Maximum point radius 
@@ -156,8 +158,10 @@ $(function() {
 			// Width of crash indicator arrow as a proportion of crash indicator width. 
 			CRASH_ARROW_WIDTH_PROP = 0.5,
 			// Proportion of plot height that should be dedicated to outliers, if any. 
-			OUTLIER_PLOT_PROP = 0.3;
-        
+			OUTLIER_PLOT_PROP = 0.25;
+			// Width of domain to use for outlier plots with a single point (in seconds). 
+			// OUTLIER_DOMAIN_WIDTH = 3;
+			
     	// Sizes in px: 
 			// Space to allocate for the x axis (ticks and labels)
         var xAxisPadding = 25, 
@@ -168,6 +172,8 @@ $(function() {
 			perDigitPadding = 7,
 			// Vertical amount by which the top of the plot (and the y axis) should exceed the highest datapoint.
 			plotTopPadding = 20, 
+			// Vertical amount by which the top of the outlier plot (and the y axis) should exceed the highest datapoint.
+			outlierPlotTopPadding = 15, 
 			// Padding between the left and right edges of the plot and the first and last days
             datePadding = 20, 
 			// Vertical space to allocate for crash indicator
@@ -208,8 +214,8 @@ $(function() {
 			// The number of values flagged as outliers should not be more than this proportion of the data. 
 			var MAX_PROP_OUTLIERS = 0.1;
 			// A value is flagged as an outlier if its gap is larger than this proportion of the maximum value. 
-			var MAX_GAP_PROP = 0.7;
-			// var MAX_GAP_PROP = 0.51;
+			// var MAX_GAP_PROP = 0.7;
+			var MAX_GAP_PROP = 0.51;
 			
 			var i, _data = data.map(function(d) { return d.value; });
 			data = data.sort(function(a,b) { return a.value - b.value; });
@@ -273,18 +279,70 @@ $(function() {
 		
 		// Dimensions are determined by container. 
         var graphContainer = d3.select(".graph"), 
+			// Dimensions of svg container
             containerWidth = parseInt(graphContainer.style("width"), 10),
             containerHeight = parseInt(graphContainer.style("height"), 10), 
-			plotHeight = containerHeight - xAxisPadding- crashHeight - topPadding;	
+			// Total amount of space allocated to the plot area, 
+			// including outlier plot, if any, and x-axis.
+			totalPlotHeight = containerHeight 
+				// - xAxisPadding 
+				- crashHeight - topPadding, 
+			// The amount by which elements of the main plot should be shifted downwards 
+			// within the overall plot group. 
+			// (only non-zero if outlier plot is present). 
+			mainPlotOffset = 0, 
+			// The heights of the individual plots, excluding axes. 
+			outlierPlotHeight = 0, 
+			mainPlotHeight = totalPlotHeight - xAxisPadding;	
 		
-        // graphContainer.style("border", "1px solid black");
+        graphContainer.style("border", "1px solid black");
 		
 		// Remove any previous plot, and add new plot svg container.  
 		graphContainer.selectAll("svg").remove();
 		var svg = graphContainer.append("svg:svg")
-            .attr("width", containerWidth + "px").attr("height", containerHeight + "px"), 
-			// Add group for startup plot, to include startup times plot and both axes. 
+				.attr("width", containerWidth + "px").attr("height", containerHeight + "px"), 
+			// Add group for startup plot, to include startup times plot, outlier plot if required, and all axes. 
 			startup = svg.append("g").attr("transform", "translate(0, " + topPadding + ")");
+			
+		// If have outliers, allocate space for extra plot. 
+		if(outlierData.length > 0) {
+			outlierPlotHeight = mainPlotHeight * OUTLIER_PLOT_PROP;
+			mainPlotOffset = outlierPlotHeight + outlierGap;
+			mainPlotHeight -= mainPlotOffset;
+			
+			// Compute y scale and axis to be able to get sizing. 
+			var yOut = d3.scale.linear()
+				// Domain should incorporate outlier values. 
+				// If only a single outlier, pad domain. 
+				.domain(outlierData.length > 1 ? d3.extent(outlierData, function(d) { return d.medTime; }) : 
+					[ Math.floor(outlierData[0].medTime), Math.ceil(outlierData[0].medTime) ]
+				)
+				.range([outlierPlotHeight - outlierPlotTopPadding, outlierPlotTopPadding]); 
+				// Update scale to incorporate extra space at the top. 
+				yOut.domain([yOut.invert(outlierPlotHeight), yOut.invert(0)]).range([outlierPlotHeight, 0]);
+			
+			var yAxisOut = d3.svg.axis()
+				.scale(yOut).orient("left");
+			if(outlierData.length == 1) { 
+				yAxisOut.tickValues([ Math.floor(outlierData[0].medTime), Math.ceil(outlierData[0].medTime) ])
+					.tickFormat(d3.format(".0f"));
+			} else { 
+				yAxisOut.ticks(Y_NUM_TICKS_OUT);
+			}
+
+			var yaOut = startup.append("g")
+				// No offset
+				.attr("class", "y axis")
+				// .attr("id", "yaxis")
+				.style("visibility", "hidden")
+				.call(yAxisOut)
+				
+			
+			
+		}
+		
+			
+		
 			
 			
 		//--------------------------------
@@ -295,19 +353,35 @@ $(function() {
 		var y = d3.scale.linear()
             // Allocate space from 0 to maximum value in dataset. 
             // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
-            .domain([0, Math.max(Y_MIN_HEIGHT, d3.max(graphData, function(d) { return d.medTime; }))])
-            .range([plotHeight, plotTopPadding]); 
+            .domain([0, Math.max(Y_MIN_HEIGHT, d3.max(startupData, function(d) { return d.medTime; }))])
+            .range([mainPlotHeight, plotTopPadding]); 
 		// Update scale to incorporate extra space at the top. 
-		y.domain([0, y.invert(0)]).range([plotHeight, 0]);
+		y.domain([0, y.invert(0)]).range([mainPlotHeight, 0]);
 			
 		var yAxis = d3.svg.axis()
             .scale(y).orient("left")
             .ticks(Y_NUM_TICKS); 
 		
-		startup.append("g")
+		var ya = startup.append("g")
+			.attr("transform", "translate(0," + mainPlotOffset + ")")
             .attr("class", "y axis")
+			// .attr("id", "yaxis")
+			.style("visibility", "hidden")
             .call(yAxis)
-        
+			
+			
+		// var bb = [];
+		
+			
+		// var box = document.getElementById("yaxis").getBBox();
+		
+		// var str = "";
+		// for(var b in box) { str += b + ":" + box[b] + ","; }
+		// alert(str);
+		
+		// svg.append("rect").attr("x", 0).attr("y",0)
+			// .attr("width", box.width).attr("height", box.height)
+			// .style("stroke","black").style("fill","none"); 
 		
 		// alert(yAxisPadding);
 		// Get the tick labels that will be displayed on the plot. 
@@ -322,6 +396,10 @@ $(function() {
 		// alert(d3.max(yTicks, function(d) { return d.toString().length; }));
 		
 		// alert(yAxisPadding);
+		
+		// Remove y axes (re-add later so that it will be drawn on top of the background rect). 
+		startup.selectAll(".y.axis").remove();
+		
 			
 		//--------------------------------
 			
@@ -334,10 +412,38 @@ $(function() {
 		
         // startup.append("rect").style("stroke","blue")
             // .attr("width",width-yAxisPadding).attr("height",height-xAxisPadding);
+			
+		// Add main plot features to separate group if necessary to handle offsetting. 
+		var mainPlot = outlierData.length === 0 ? startup : 
+			startup.append("g").attr("transform", "translate(0," + mainPlotOffset + ")");
+ 
+		mainPlot.append("rect").attr("class", "startup")
+			// .attr("y", mainPlotOffset)
+			.attr("width", plotWidth).attr("height", mainPlotHeight);
+ 
  
 		// Add background colour. 
-		startup.append("rect").attr("id", "startup")
-			.attr("width", plotWidth).attr("height", plotHeight);
+		if(outlierData.length > 0) {
+			startup.append("rect").attr("class", "startup")
+				.attr("width", plotWidth).attr("height", outlierPlotHeight);
+				
+			startup.append("g")
+				.attr("class", "y axis")
+				.call(yAxisOut);
+				
+			startup.append("polyline")
+				.attr("points", "0," + outlierPlotHeight + " " + plotWidth + "," + outlierPlotHeight)
+				.attr("class", "boundary");
+			
+			mainPlot.append("polyline")
+				.attr("points", "0,0 " + plotWidth + ",0")
+				.attr("class", "boundary");
+			
+		}
+		
+		
+			
+		
 		
 		// Set up scale for dates on x-axis. 
 		// If earliest date is less than two weeks ago, set to two weeks ago.
@@ -363,15 +469,14 @@ $(function() {
 			// .tickFormat("");
             
      
-        startup.append("g")
+        mainPlot.append("g")
             .attr("class", "x axis")
-            .attr("transform", "translate(0," + plotHeight + ")")
+            .attr("transform", "translate(0," + mainPlotHeight + ")")
             .call(xAxis)
 			// .append("g").call(xAxisSub);
-            
-		// Remove and readd y axis so that it will be drawn on top of the background rect. 
-		startup.select(".y.axis").remove();
-		startup.append("g")
+       	
+		mainPlot.append("g")
+			// .attr("transform", "translate(0," + mainPlotOffset + ")")
             .attr("class", "y axis")
             .call(yAxis)
 		
@@ -386,8 +491,26 @@ $(function() {
 			(x(d3.time.day.offset(earliest, 1)) - x(earliest)) * POINT_DAY_PROP, 
 			MIN_POINT_RAD), MAX_POINT_RAD); 
 				
-		startup.selectAll("circle")
-            .data(startupData).enter().append("circle")
+		if(outlierData.length > 0) {
+			// for(var i=0; i<outlierData.length; i++) { 
+				// alert(outlierData[i].medTime + " : " + yOut(outlierData[i].medTime));
+			// }
+			// alert(yOut.domain()); 
+			// alert(yOut.range()); 
+			
+			startup.selectAll("circle").data(outlierData).enter().append("circle")
+				.attr("class", "startup-point")
+				.attr("r", pointRadius)
+				.attr("cx", function(d) { return x(d.date); })
+				.attr("cy", function(d) { return yOut(d.medTime); })
+			
+		}
+		// for(var i=0; i<startupData.length; i++) { 
+			// alert(startupData[i].medTime + " : " + y(startupData[i].medTime));
+		// }
+		mainPlot
+			// .append("g").attr("transform", "translate(0," + mainPlotOffset + ")")
+			.selectAll("circle").data(startupData).enter().append("circle")
             .attr("class", "startup-point")
             .attr("r", pointRadius)
             .attr("cx", function(d) { return x(d.date); })
