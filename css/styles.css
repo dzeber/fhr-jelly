@@ -536,7 +536,7 @@ figcaption {
 }
 #startup {
 	fill: #e5e5e5; 
-	/* stroke: #cccccc; */
+	/* stroke: none */
 }
 .crash-point { 
 	/* fill: blue; */
