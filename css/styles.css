@@ -531,14 +531,16 @@ figcaption {
     fill: none;
 	stroke: black;
 }
-.dot {
+.startup-point {
 	fill: #458b74; 
 }
 #startup {
-	fill: #f2f2f2; 
+	fill: #e5e5e5; 
 	/* stroke: #cccccc; */
 }
-
+.crash-point { 
+	/* fill: blue; */
+}
 
 /* --- Panels --- */
 .panelContainer {

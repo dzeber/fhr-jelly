@@ -130,11 +130,24 @@ $(function() {
 			// Maximum point radius 
 			MAX_POINT_RAD = 5, 
 			// Proportion of space allocated to a single day that the point radius should take
-			POINT_DAY_PROP = 0.5; 
+			POINT_DAY_PROP = 0.5, 
+			// Proportion of space allocated to a single day that the crash point radius should take
+			CRASH_DAY_PROP = 0.9, 
+			// Radius parameter for rounded corners for crash indicators
+			CRASH_RX = 4, 
+			// Max number of crashes to be registered on the colour scale 
+			// Higher numbers of crashes will be capped at this 
+			CRASH_NUM_CAP = 10, 
+			// Range to specify for the crash colour scale
+			CRASH_COL_RANGE = ["#ffc966", "#4c0000"], 
+			// Height of crash indicator arrow
+			CRASH_ARROW_HEIGHT = 5,
+			// Width of crash indicator arrow as a proportion of crash indicator width. 
+			CRASH_ARROW_WIDTH_PROP = 0.5;
         
     	// Padding sizes in px: 
-        // Space to allocate for the axes
-        var xAxisPadding = 20, 
+        // Space to allocate for the x axis (ticks and labels)
+        var xAxisPadding = 25, 
 			// Padding allocated for the y axis with ticks, but excluding labels. 
             yAxisBasePadding = 10,
 			yAxisPadding = yAxisBasePadding,
@@ -143,7 +156,9 @@ $(function() {
 			// Vertical amount by which the top of the plot (and the y axis) should exceed the highest datapoint.
 			plotTopPadding = 20, 
 			// Padding between the left and right edges of the plot and the first and last days
-            datePadding = 20; 
+            datePadding = 20, 
+			// Vertical space to allocate for crash indicator
+			crashHeight = 25;
 			
 			
 		// Diagnostic. 
@@ -173,12 +188,77 @@ $(function() {
 		// Dates are interpreted as midnight GMT. Change to midnight local time for display purposes. 
 		graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
 		
+		// Remove dates with medTime undefined or null 
+		// (means that there was no appSessions.previous for that day). 
+		var startupData = graphData.filter(function(d) { return typeof d.medTime !== "undefined" && d.medTime !== null; });
+		
+		// Detect outliers. 
+		var outlyingDates = (function(data) {
+			// The number of values flagged as outliers should not be more than this proportion of the data. 
+			var MAX_PROP_OUTLIERS = 0.1;
+			// A value is flagged as an outlier if its gap is larger than this proportion of the maximum value. 
+			var MAX_GAP_PROP = 0.7;
+			
+			var i;
+			data = data.sort(function(a,b) { return a.value - b.value; });
+			// inspectData(data);
+			
+			var gaps = [];
+			// Compute differences between consecutive sorted values. 
+			// Index refers to lower endpoint of gap. 
+			for(i=1; i < data.length; i++) {
+				gaps.push(data[i].value - data[i-1].value);
+			}
+			// console.log(gaps);
+			// data.splice(0,1);
+			// inspectData(data);
+			
+			// This will now be the index of the highest value in data currently not flagged as an outlier. 
+			var upper = data.length - 1;
+			// The index of the lowest point to be flagged as an outlier. 
+			var cutPoint = data.length;
+			// If the point at index upper is flagged as an outlier, 
+			// then the point at upper - 1 (the upper-th point in the array) will become 
+			// the new highest point not flagged. 
+			// If the number of points below upper-1 (inclusive) is less than 1 - MAX_PROP_OUTLIERS, 
+			// do not consider any further points for flagging. 
+			var stoppingPoint = data.length * (1 - MAX_PROP_OUTLIERS);
+			// While no outliers have yet been flagged, and we have not yet considered a large enough proportion of the values: 
+			while(cutPoint >= data.length && upper > stoppingPoint) {
+				// Find the largest gap among the points up to and including upper. 
+				var indexOfMax = gaps.lastIndexOf(Math.max.apply(null, gaps), upper - 1);
+				// If this gap is large enough, and not too much data will be flagged: 
+				if(gaps[indexOfMax] > data[upper].value * MAX_GAP_PROP && indexOfMax + 1 > stoppingPoint) {
+					// Flag all points above the upper endpoint of the gap (inclusive) as outliers. 
+					cutPoint = indexOfMax + 1;
+				} else {
+					// Consider only points below the lower endpoint of the gap (inclusive). 
+					upper = indexOfMax;
+				}
+			}
+			
+			var dates = []; 
+			for( ; cutPoint < data.length; cutPoint++) {
+				dates.push(data[cutPoint].date);
+			}
+			
+			// inspectData(dates);
+			// console.log(dates)
+			// alert(dates);
+			return dates;
+			
+		})(startupData.map(function(d) { return { date: d.date, value: d.medTime }; }));
+		
+		// inspectData(graphData);
 		
 		// Compute y axis padding dynamically according to the number of digits in the labels. 
 		// There is probably a better way to do this. 
 		yAxisPadding += perDigitPadding * Math.floor(d3.max(graphData, function(d) { return d.medTime; })).toString().length;
 		
-        // Add group for interior of startup plot. 
+        // Add group for startup plot. 
+		// Includes startup times plot and both axes. 
+		// Height is containerHeight - crashHeight
+		// Width is containerWidth. 
         var startup = svg.append("g")
 			.attr("transform", "translate(" + yAxisPadding + ", 0)");
         
@@ -186,7 +266,9 @@ $(function() {
             // .attr("width",width-yAxisPadding).attr("height",height-xAxisPadding);
     
 		var plotWidth = containerWidth - yAxisPadding, 
-			plotHeight = containerHeight - xAxisPadding;
+			plotHeight = containerHeight - xAxisPadding
+				- crashHeight
+			;
 		
 		// Add background colour. 
 		startup.append("rect").attr("id", "startup")
@@ -214,9 +296,18 @@ $(function() {
 	
 		
         // Add axes. 
+		// Main x-axis with ticks labelled according to prettiness. 
         var xAxis = d3.svg.axis()
             .scale(x).orient("bottom")
 			.tickFormat(d3.time.format("%b %d"));
+			
+		// console.log(xAxis.ticks());
+		
+		// Secondary x-axis to show unlabelled ticks for each day. 
+		// var xAxisSub = d3.svg.axis()
+            // .scale(x).orient("bottom")
+			// .ticks(d3.time.days)
+			// .tickFormat("");
             
         var yAxis = d3.svg.axis()
             .scale(y).orient("left")
@@ -225,29 +316,82 @@ $(function() {
         startup.append("g")
             .attr("class", "x axis")
             .attr("transform", "translate(0," + plotHeight + ")")
-            .call(xAxis);
+            .call(xAxis)
+			// .append("g").call(xAxisSub);
             
         startup.append("g")
             .attr("class", "y axis")
             .call(yAxis);
         
         // Add points. 
-		// Remove dates with medTime undefined or null 
-		// (means that there was no appSessions.previous for that day). 
-		var startupData = graphData.filter(function(d) { return typeof d.medTime !== "undefined" && d.medTime !== null; });
+		
+		
+		// inspectData(startupData);
 
 		// Scale the point radius according to the horizontal space allocated per day. 
 		var pointRadius = Math.min(Math.max(
 			(x(d3.time.day.offset(earliest, 1)) - x(earliest)) * POINT_DAY_PROP, 
 			MIN_POINT_RAD), MAX_POINT_RAD); 
 				
-		startup.selectAll(".dot")
+		startup.selectAll("circle")
             .data(startupData).enter().append("circle")
-            .attr("class", "dot")
+            .attr("class", "startup-point")
             .attr("r", pointRadius)
             .attr("cx", function(d) { return x(d.date); })
             .attr("cy", function(d) { return y(d.medTime); })
         
+		// Group for crash indicator below x axis. 
+		// Dimensions are plotWidth x crashHeight.
+		var crashes = svg.append("g").attr("transform", 
+			"translate(" + yAxisPadding + "," + (containerHeight - crashHeight) + ")");
+		
+		// crashes.append("rect").attr("width", plotWidth).attr("height", crashHeight)
+			// .style("fill", "beige");
+		
+		// Only retain dates with positive crash count. 
+		var crashData = graphData.filter(function(d) { return d.crashCount > 0; });
+		
+		// Scale the point width according to the horizontal space allocated per day. 
+		var pointWidth = Math.min((x(d3.time.day.offset(earliest, 1)) - x(earliest)) * CRASH_DAY_PROP, crashHeight - CRASH_ARROW_HEIGHT);
+		// Width of the base of the arrow. 
+		var arrowWidth = pointWidth * CRASH_ARROW_WIDTH_PROP;
+		
+		
+		// Set up colour scale for crashes. 
+		var crashScale = d3.scale.linear()
+			// Cap maximum number of crashes to register on the scale. 
+			.domain([1, CRASH_NUM_CAP])
+			.range(CRASH_COL_RANGE);
+		
+		// Add crash indicators. 
+		crashes.selectAll("rect")
+			.data(crashData).enter() 
+			.append("rect")
+			// .attr("class", "crash-point")
+			.attr("x", function(d) { return x(d.date) - pointWidth/2; })
+			.attr("y", CRASH_ARROW_HEIGHT)
+			.attr("width", pointWidth).attr("height", crashHeight - CRASH_ARROW_HEIGHT)
+			.attr("rx", CRASH_RX)
+			.style("fill", function(d) { 
+				// console.log(d.crashCount + " : " + crashScale(d.crashCount));
+				return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
+			});
+		
+		// Add arrows pointing to x-axis. 
+		crashes.selectAll("polygon")
+			.data(crashData).enter() 
+			.append("polygon")
+			// .attr("class", "crash-point")
+			.attr("points", function(d) { 
+				return (x(d.date) - arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
+					(x(d.date) + arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
+					x(d.date) + ",0";
+			})
+			.style("fill", function(d) { 
+				return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
+			});
+			
+			
     },
     
     
