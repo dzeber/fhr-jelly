@@ -567,6 +567,9 @@ $(function() {
 			});
 			
 			
+			// Set y axis label position relative to the height of the plot. 
+			d3.select("#yaxis-label").style("top", Math.round((totalPlotHeight - xAxisPadding)/2) + "px");
+			
     },
     
     
