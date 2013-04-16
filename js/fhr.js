@@ -155,8 +155,10 @@ $(function() {
 			// Space to allocate for the x axis (ticks and labels)
         var xAxisPadding = 25, 
 			// Padding allocated for the y axis with ticks, but excluding labels. 
-            yAxisBasePadding = 10,
-			yAxisPadding = yAxisBasePadding,
+            // yAxisBasePadding = 10,
+			// yAxisPadding = yAxisBasePadding,
+			// Horizontal padding to allocate for the y axis (computed based on tick labels). 
+			yAxisPadding,
             // Padding to add per digit on the y-axis labels
 			perDigitPadding = 7,
 			// Vertical amount by which the top of the plot (and the y axis) should exceed the highest datapoint.
@@ -168,7 +170,7 @@ $(function() {
 			// Vertical space to allocate for crash indicator
 			crashHeight = 25, 
 			// Vertical space to add between main plot and outlier plot, if any. 
-			outlierGap = 10, 
+			outlierGap = 15, 
 			// Padding to add at top of entire plot - primarily to stop top axis label getting cut off. 
 			topPadding = 5;
 			
@@ -282,9 +284,12 @@ $(function() {
 			mainPlotOffset = 0, 
 			// The heights of the individual plots, excluding axes. 
 			outlierPlotHeight = 0, 
-			mainPlotHeight = totalPlotHeight - xAxisPadding;	
+			mainPlotHeight = totalPlotHeight - xAxisPadding;
 		
-        graphContainer.style("border", "1px solid black");
+		// Collect bounding boxes of the y axes to calculate y axis padding. 
+		var bb = [];
+		
+        // graphContainer.style("border", "1px solid black");
 		
 		// Remove any previous plot, and add new plot svg container.  
 		graphContainer.selectAll("svg").remove();
@@ -322,15 +327,15 @@ $(function() {
 			var yaOut = startup.append("g")
 				// No offset
 				.attr("class", "y axis")
-				// .attr("id", "yaxis")
+				.attr("id", "y-axis-out")
 				.style("visibility", "hidden")
 				.call(yAxisOut)
-				
 			
-			
+			bb.push(document.getElementById("y-axis-out").getBBox());
 		}
 		
 			
+		
 		
 			
 			
@@ -354,24 +359,18 @@ $(function() {
 		var ya = startup.append("g")
 			.attr("transform", "translate(0," + mainPlotOffset + ")")
             .attr("class", "y axis")
-			// .attr("id", "yaxis")
+			.attr("id", "y-axis")
 			.style("visibility", "hidden")
             .call(yAxis)
 			
-			
-		// var bb = [];
+		bb.push(document.getElementById("y-axis").getBBox());	
+		// alert(d3.max(bb, function(d) { return d.width; }));
 		
-			
-		// var box = document.getElementById("yaxis").getBBox();
+		// Padding should be the maximum width required by the computed y axis bounding boxes. 
+		// Need computed axis so that ticks are chosen and labelled. 
+		yAxisPadding = d3.max(bb, function(d) { return d.width; });
 		
-		// var str = "";
-		// for(var b in box) { str += b + ":" + box[b] + ","; }
-		// alert(str);
-		
-		// svg.append("rect").attr("x", 0).attr("y",0)
-			// .attr("width", box.width).attr("height", box.height)
-			// .style("stroke","black").style("fill","none"); 
-		
+/*		
 		// alert(yAxisPadding);
 		// Get the tick labels that will be displayed on the plot. 
 		var yTicks = [];
@@ -386,6 +385,7 @@ $(function() {
 		
 		// alert(yAxisPadding);
 		
+*/
 		// Remove y axes (re-add later so that it will be drawn on top of the background rect). 
 		startup.selectAll(".y.axis").remove();
 		
