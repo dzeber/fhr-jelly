@@ -205,6 +205,12 @@ $(function() {
 		var graphData = getAverageGraphData();
 		// Dates are interpreted as midnight GMT. Change to midnight local time for display purposes. 
 		graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
+	
+		// for(var k in graphData) {
+			// console.log(graphData[k].date + ": " + graphData[k].events.updateTo);
+		// }
+		
+		// inspectData(graphData);
 		
 		// Remove dates with medTime undefined or null 
 		// (means that there was no appSessions.previous for that day). 
@@ -479,17 +485,13 @@ $(function() {
 		
 		// Add gridlines as separate axes. 
 		var yGrid = d3.svg.axis().scale(y).orient("left")
-            .ticks(Y_NUM_TICKS).tickSize(-plotWidth), 
-			xGrid = d3.svg.axis().scale(x).orient("bottom").tickSize(-plotWidth);
+            .ticks(Y_NUM_TICKS).tickSize(-plotWidth); 
+			// xGrid = d3.svg.axis().scale(x).orient("bottom").tickSize(-plotWidth);
 		
 
 		// Add axes to plot. 
 		mainPlot.append("g").attr("class", "gridlines").call(yGrid);
 		mainPlot.append("g").attr("class", "y axis").call(yAxis);
-		
-		// mainPlot.append("g").attr("class", "gridlines")
-			// .attr("transform", "translate(0," + mainPlotHeight + ")")
-            // .call(xGrid); 
 		
 		
 		// Secondary x-axis to show unlabelled ticks for each day. 
@@ -604,6 +606,21 @@ $(function() {
 			// Set y axis label position relative to the height of the plot. 
 			d3.select("#yaxis-label").style("top", Math.round((totalPlotHeight - xAxisPadding) / 2) + "px");
 			
+			
+			
+		//--------------------------------
+		
+		// Only retain dates with positive crash count. 
+		var updatesData = graphData.filter(function(d) { 
+			return Object.keys(d.updates).length > 0;
+			// return typeof d.updates.build !== "undefined"
+			 // || typeof d.updates.version !== "undefined"; 
+		});
+		
+		// for(var k in updatesData) { 
+			// console.log(updatesData[k].date + " : " + updatesData[k].updates.build);
+			// console.log(updatesData[k].date + " : " + updatesData[k].updates.version);
+		// }
     },
     
     
