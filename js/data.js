@@ -61,7 +61,16 @@ computeMedian = function(values){
 // Collects data to be plotted on Average plot. 
 // Returns array of objects of the form: 
 // graphData = [ 
-//      { date : '1360108800000', sessionCount : 5, medTime : 23, crashCount : 2, events : {} }, ...
+//      { 
+//			date : '1360108800000', 
+//			sessionCount : 5, 
+//			medTime : 23, 
+//			crashCount : 2, 
+//			updates : {
+//				build : '2013031243427', 
+//				version: '23.0a1'
+//			} 
+//		}, ...
 // ]
 getAverageGraphData = function() {
     var days = payload.data.days,
@@ -82,12 +91,13 @@ getAverageGraphData = function() {
         if(currentDayAsDate >= cutoffDate && sortedDates.hasOwnProperty(day)) {
             var sessionsInfo = days[currentDay]['org.mozilla.appSessions.previous'], 
                 crashesInfo = days[currentDay]['org.mozilla.crashes.crashes'],
+				versionsInfo = days[currentDay]['org.mozilla.appInfo.versions'],
                 entry = { 
                     "date" : currentDayAsDate, 
                     "sessionCount" : 0,
                     "medTime" : null,
                     "crashCount" : 0,
-                    "events" : {}
+                    "updates" : {}
                 };
             
             // Record median startup time and number of sessions, if any. 
@@ -117,6 +127,16 @@ getAverageGraphData = function() {
                     entry.crashCount += crashesInfo.submitted;
                 }
             }
+			
+			// Record updates, if any. 
+			if(typeof versionsInfo !== 'undefined') {
+				if(typeof versionsInfo.appBuildID !== 'undefined') {
+					entry.updates.build = d3.max(versionsInfo.appBuildID);
+				}
+				if(typeof versionsInfo.appVersion !== 'undefined') {
+					entry.updates.version = d3.max(versionsInfo.appVersion);
+				}
+			}
             
             graphData.push(entry);
         }
