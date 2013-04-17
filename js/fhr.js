@@ -186,17 +186,23 @@ $(function() {
 			topPadding = 5;
 			
 			
-			
+		// *****
 		// Diagnostic. 
-		// var inspectData = function(dataArray) {
-			// for(var i=0; i < dataArray.length; i++) { 
-				// var str = "";
-				// for(var k in dataArray[i]) {
-					// str += k + ": " + dataArray[i][k] + ",  ";
-				// }
-				// console.log(str);
-			// }
-		// };
+		var inspectData = function(dataArray) {
+			for(var i=0; i < dataArray.length; i++) { 
+				var str = "";
+				for(var k in dataArray[i]) {
+					str += k + ": " + dataArray[i][k] + ",  ";
+				}
+				console.log(str);
+				str = "";
+				for(var k in dataArray[i].updates) {
+					str += k + ": " + dataArray[i].updates[k] + ",  ";
+				}
+				console.log(str);
+			}
+		};
+		// *****
 		
 		
 		//--------------------------------
@@ -611,16 +617,46 @@ $(function() {
 		//--------------------------------
 		
 		// Only retain dates with positive crash count. 
-		var updatesData = graphData.filter(function(d) { 
-			return Object.keys(d.updates).length > 0;
-			// return typeof d.updates.build !== "undefined"
-			 // || typeof d.updates.version !== "undefined"; 
-		});
+		var updatesData = graphData.filter(function(d) { return typeof d.updates !== "undefined"; });
+		inspectData(updatesData);
+				
+		var versionUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
+			.tickValues(updatesData.filter(
+				function(d) { return typeof d.updates.version !== "undefined"; }
+			).map(function(d) { return d.date; }))
+			.tickSize(-mainPlotHeight);
+			
+		mainPlot.append("g").attr("class", "version-update")
+            .attr("transform", "translate(0," + mainPlotHeight + ")")
+            .call(versionUpdateAxis);
 		
-		// for(var k in updatesData) { 
-			// console.log(updatesData[k].date + " : " + updatesData[k].updates.build);
-			// console.log(updatesData[k].date + " : " + updatesData[k].updates.version);
-		// }
+		if(outlierData.length > 0) { 
+			startup.append("g").attr("class", "version-update")
+            .attr("transform", "translate(0," + outlierPlotHeight + ")")
+            .call(versionUpdateAxis.tickSize(-outlierPlotHeight));
+		}
+		
+		var UPDATE_TICK_OFFSET = 5, 
+			UPDATE_TICK_LENGTH = 10;
+		
+		
+		var buildUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
+			.tickValues(updatesData.filter(
+				function(d) { 
+					return typeof d.updates.build !== "undefined" && typeof d.updates.version === "undefined"; }
+			).map(function(d) { return d.date; }))
+			.tickSize(UPDATE_TICK_LENGTH);
+			
+		mainPlot.append("g").attr("class", "build-update")
+            .attr("transform", "translate(0," + (mainPlotHeight - UPDATE_TICK_OFFSET) + ")")
+            .call(buildUpdateAxis);
+		
+		if(outlierData.length > 0) { 
+			startup.append("g").attr("class", "build-update")
+            .attr("transform", "translate(0," + (outlierPlotHeight - UPDATE_TICK_OFFSET) + ")")
+            .call(buildUpdateAxis);
+		}
+			
     },
     
     

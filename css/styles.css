@@ -547,6 +547,22 @@ figcaption {
 .gridlines line {
 	stroke: #fff;
 }
+.version-update path, 
+.version-update text {
+	display: none; 
+}
+.version-update line { 
+	stroke: #8b0000;
+	stroke-dasharray: 2;
+}
+.build-update path, 
+.build-update text {
+	display: none; 
+}
+.build-update line { 
+	stroke: #e00;
+	stroke-width: 3;
+}
 .startup-point {
 	fill: #458b74; 
 }
