@@ -334,7 +334,7 @@ $(function() {
 			} else { 
 				yAxisOut.ticks(Y_NUM_TICKS_OUT);
 			}
-
+			
 			var yaOut = startup.append("g")
 				// No offset
 				.attr("class", "y axis")
@@ -417,20 +417,35 @@ $(function() {
 		var mainPlot = outlierData.length === 0 ? startup : 
 			startup.append("g").attr("transform", "translate(0," + mainPlotOffset + ")");
  
+		// Add background colour.  
 		mainPlot.append("rect").attr("class", "startup")
 			// .attr("y", mainPlotOffset)
 			.attr("width", plotWidth).attr("height", mainPlotHeight);
  
  
-		// Add background colour. 
 		if(outlierData.length > 0) {
 			startup.append("rect").attr("class", "startup")
 				.attr("width", plotWidth).attr("height", outlierPlotHeight);
 				
-			startup.append("g")
-				.attr("class", "y axis")
-				.call(yAxisOut);
+			// Add gridlines as separate axis. 
+			var yGridOut = d3.svg.axis().scale(yOut).orient("left").tickSize(-plotWidth); 
+			var yAxisOutTickValues = yAxisOut.tickValues(); 
+			if(yAxisOutTickValues == null) {
+				yGridOut.ticks(Y_NUM_TICKS_OUT);
+			} else {
+				yGridOut.tickValues(yAxisOutTickValues);
+			}
+
+			// Add axes to plot. 
+			startup.append("g").attr("class", "gridlines").call(yGridOut);
+			startup.append("g").attr("class", "y axis").call(yAxisOut);
+			
 				
+			// startup.append("g")
+				// .attr("class", "y axis")
+				// .call(yAxisOut);
+				
+			// Add dotted lines along edges of gap between plots. 	
 			startup.append("polyline")
 				.attr("points", "0," + outlierPlotHeight + " " + plotWidth + "," + outlierPlotHeight)
 				.attr("class", "boundary");
@@ -462,6 +477,21 @@ $(function() {
 			.tickFormat(d3.time.format("%b %d"));
 			
 		
+		// Add gridlines as separate axes. 
+		var yGrid = d3.svg.axis().scale(y).orient("left")
+            .ticks(Y_NUM_TICKS).tickSize(-plotWidth), 
+			xGrid = d3.svg.axis().scale(x).orient("bottom").tickSize(-plotWidth);
+		
+
+		// Add axes to plot. 
+		mainPlot.append("g").attr("class", "gridlines").call(yGrid);
+		mainPlot.append("g").attr("class", "y axis").call(yAxis);
+		
+		// mainPlot.append("g").attr("class", "gridlines")
+			// .attr("transform", "translate(0," + mainPlotHeight + ")")
+            // .call(xGrid); 
+		
+		
 		// Secondary x-axis to show unlabelled ticks for each day. 
 		// var xAxisSub = d3.svg.axis()
             // .scale(x).orient("bottom")
@@ -475,10 +505,14 @@ $(function() {
             .call(xAxis)
 			// .append("g").call(xAxisSub);
        	
-		mainPlot.append("g")
-			// .attr("transform", "translate(0," + mainPlotOffset + ")")
-            .attr("class", "y axis")
-            .call(yAxis)
+		// mainPlot.append("g")
+			// // .attr("transform", "translate(0," + mainPlotOffset + ")")
+            // .attr("class", "y axis")
+            // .call(yAxis)
+			// // .append("g").attr("class", "gridlines")
+			// // .call(yAxis);
+		
+		
 		
 			
 		//--------------------------------
@@ -568,7 +602,7 @@ $(function() {
 			
 			
 			// Set y axis label position relative to the height of the plot. 
-			d3.select("#yaxis-label").style("top", Math.round((totalPlotHeight - xAxisPadding)/2) + "px");
+			d3.select("#yaxis-label").style("top", Math.round((totalPlotHeight - xAxisPadding) / 2) + "px");
 			
     },
     

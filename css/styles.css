@@ -503,6 +503,7 @@ h3 {
     color: #fff;
 }
 .graph {
+	/* y-axis should be positioned relative to the graph... */
 	position: relative;
     clear: both;
     width: 700px;
@@ -511,6 +512,7 @@ h3 {
 #yaxis-label {
     /* display: none; */
     position: absolute;
+	/* vertical positioning will be set in fhr.js relative to the plot size. */
     /* top: 50%;  */
     left: -60px;
     font-size: .8rem;
@@ -521,6 +523,7 @@ figcaption {
     font-size: .8rem;
     line-height: 1rem;
 }
+/* --- SVG Elements --- */
 .axis {
     shape-rendering: crispEdges;
 }
@@ -536,6 +539,13 @@ figcaption {
 .y.axis path {
     fill: none;
 	stroke: black;
+}
+.gridlines path, 
+.gridlines text {
+	display: none;
+}
+.gridlines line {
+	stroke: #fff;
 }
 .startup-point {
 	fill: #458b74; 
