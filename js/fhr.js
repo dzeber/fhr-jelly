@@ -651,11 +651,11 @@ $(function() {
             .attr("transform", "translate(0," + (mainPlotHeight - UPDATE_TICK_OFFSET) + ")")
             .call(buildUpdateAxis);
 		
-		if(outlierData.length > 0) { 
-			startup.append("g").attr("class", "build-update")
-            .attr("transform", "translate(0," + (outlierPlotHeight - UPDATE_TICK_OFFSET) + ")")
-            .call(buildUpdateAxis);
-		}
+		// if(outlierData.length > 0) { 
+			// startup.append("g").attr("class", "build-update")
+            // .attr("transform", "translate(0," + (outlierPlotHeight - UPDATE_TICK_OFFSET) + ")")
+            // .call(buildUpdateAxis);
+		// }
 			
     },
     
