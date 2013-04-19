@@ -502,7 +502,8 @@ h3 {
 	position: relative;
     clear: both;
     width: 700px;
-    height: 292px;
+    height: 292px; 
+    /* height: 400px; */
 }
 #yaxis-label {
     /* display: none; */
@@ -549,6 +550,10 @@ figcaption {
 .version-update line { 
 	stroke: #8b0000;
 	stroke-dasharray: 2;
+}
+.version-label {
+	fill: black;
+	font-size: 10px;
 }
 .build-update path, 
 .build-update text {
