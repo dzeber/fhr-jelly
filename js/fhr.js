@@ -197,7 +197,7 @@ $(function() {
         //--------------------------------
         
         // Retrieve data to be plotted. 
-        var graphData = getAverageGraphData();
+        var graphData = getGraphData(true);
         // Dates are interpreted as midnight GMT. Change to midnight local time for display purposes. 
         graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
     
