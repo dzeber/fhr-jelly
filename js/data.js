@@ -64,15 +64,15 @@ computeMedian = function(values){
 // Returns array of objects of the form: 
 // graphData = [ 
 //      { 
-//			date : '1360108800000', 
-//			sessionCount : 5, 
-//			medTime : 23, 
-//			crashCount : 2, 
-//			updates : {
-//				build : '2013031243427', 
-//				version: '23.0a1'
-//			} 
-//		}, ...
+//            date : '1360108800000', 
+//            sessionCount : 5, 
+//            medTime : 23, 
+//            crashCount : 2, 
+//            updates : {
+//                build : '2013031243427', 
+//                version: '23.0a1'
+//            } 
+//        }, ...
 // ]
 getAverageGraphData = function() {
     var days = payload.data.days,
@@ -93,7 +93,7 @@ getAverageGraphData = function() {
         if(currentDayAsDate >= cutoffDate && sortedDates.hasOwnProperty(day)) {
             var sessionsInfo = days[currentDay]['org.mozilla.appSessions.previous'], 
                 crashesInfo = days[currentDay]['org.mozilla.crashes.crashes'],
-				versionsInfo = days[currentDay]['org.mozilla.appInfo.versions'],
+                versionsInfo = days[currentDay]['org.mozilla.appInfo.versions'],
                 entry = { 
                     "date" : currentDayAsDate, 
                     "sessionCount" : 0,
@@ -129,16 +129,16 @@ getAverageGraphData = function() {
                     entry.crashCount += crashesInfo.submitted;
                 }
             }
-			
-			// Record updates, if any. 
-			if(typeof versionsInfo !== 'undefined') {
-				if(typeof versionsInfo.appBuildID !== 'undefined') {
-					entry.updates.build = d3.max(versionsInfo.appBuildID);
-				}
-				if(typeof versionsInfo.appVersion !== 'undefined') {
-					entry.updates.version = d3.max(versionsInfo.appVersion);
-				}
-			}
+            
+            // Record updates, if any. 
+            if(typeof versionsInfo !== 'undefined') {
+                if(typeof versionsInfo.appBuildID !== 'undefined') {
+                    entry.updates.build = d3.max(versionsInfo.appBuildID);
+                }
+                if(typeof versionsInfo.appVersion !== 'undefined') {
+                    entry.updates.version = d3.max(versionsInfo.appVersion);
+                }
+            }
             
             graphData.push(entry);
         }
