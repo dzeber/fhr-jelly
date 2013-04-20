@@ -55,6 +55,10 @@ var getGraphData = (function() {
         ]
         */
         getAverageGraphData = function() {
+            if(!payload) {
+                return [];
+            }
+            
             var days = payload.data.days,
                 graphData = [],
                 sortedDates = sortDates(payload.data.days, false),
