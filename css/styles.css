@@ -578,6 +578,10 @@ figcaption {
 .crash-point { 
 	/* fill: blue; */
 }
+svg {
+    width: 100%;
+    height: 100%;
+}
 
 /* --- Panels --- */
 .panelContainer {
