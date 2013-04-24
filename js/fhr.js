@@ -88,261 +88,256 @@ $(function() {
     // Generate the plots. 
     var FHRPlot = (function() {
     
-            // ****************************
-            // Diagnostic. 
-            var inspectData = function(dataArray) {
-                for(var i=0; i < dataArray.length; i++) { 
-                    var str = "";
-                    for(var k in dataArray[i]) {
-                        str += k + ": " + dataArray[i][k] + ",  ";
-                    }
-                    console.log(str);
-                    str = "";
-                    for(var k in dataArray[i].updates) {
-                        str += k + ": " + dataArray[i].updates[k] + ",  ";
-                    }
-                    console.log(str);
+        // ****************************
+        // Diagnostic. 
+        var inspectData = function(dataArray) {
+            for(var i=0; i < dataArray.length; i++) { 
+                var str = "";
+                for(var k in dataArray[i]) {
+                    str += k + ": " + dataArray[i][k] + ",  ";
                 }
+                console.log(str);
+                str = "";
+                for(var k in dataArray[i].updates) {
+                    str += k + ": " + dataArray[i].updates[k] + ",  ";
+                }
+                console.log(str);
+            }
+        };
+        // ****************************
+       
+       
+        var params = {
+                outlier: {
+                    // The number of values flagged as outliers should not exceed this proportion of the data. 
+                    MAX_PROP_OUTLIERS: 0.1,
+                    // A value is flagged as an outlier if its distance from the next largest value 
+                    // is larger than this proportion of the maximum value. 
+                    MAX_GAP_PROP: 0.7
+                    // MAX_GAP_PROP: 0.51
+                }                    
             };
-            // ****************************
-           
-           
-            var params = {
-                    outlier: {
-                        // The number of values flagged as outliers should not exceed this proportion of the data. 
-                        MAX_PROP_OUTLIERS: 0.1,
-                        // A value is flagged as an outlier if its distance from the next largest value 
-                        // is larger than this proportion of the maximum value. 
-                        MAX_GAP_PROP: 0.7
-                        // MAX_GAP_PROP: 0.51
-                    }                    
-                };
+        
+        var graphContainer = d3.select(".graph"),
+        
+            // Sizing parameters: 
             
-            var graphContainer = d3.select(".graph"), 
-                // Necessary?
-                containerWidth = parseInt(graphContainer.style("width"), 10),
-                containerHeight = parseInt(graphContainer.style("height"), 10),
+            // Dimensions of the outer container
+            containerWidth = parseInt(graphContainer.style("width"), 10),
+            containerHeight = parseInt(graphContainer.style("height"), 10),
+            
+            // Padding to add at top of entire plot - primarily to stop top axis label getting cut off. 
+            topPadding = 5,
+            // Vertical space for the x axis (ticks and labels)
+            xAxisHeight = 20, 
+            // Vertical space to allocate for crash indicator
+            crashHeight = 20, 
+            // Vertical space to add between main plot and outlier plot, if any. 
+            outlierGap = 15, 
+            
+            // Vertical amount by which the top of the plot (and the y axis) should exceed the highest datapoint.
+            mainPlotTopPadding = 20, 
+            // Vertical amount by which the top and bottom of the outlier plot (and the y axis) 
+            // should exceed the highest and lowest datapoints respectively.
+            outlierPlotPadding = 15, 
+            // Padding between the left and right edges of the plot and the first and last days
+            leftRightPadding = 20, 
+            // Padding allocated for the y axis with ticks, but excluding labels. 
+            // yAxisBasePadding = 10,
+            // yAxisPadding = yAxisBasePadding,
+            // Horizontal padding to allocate for the y axis (computed based on tick labels). 
+            yAxisPadding = 0,
+            // Padding to add per digit on the y-axis labels
+            // perDigitPadding = 7,
+            
+            // The height of the main startup times plot area, excluding axes and the outlier plot, if any. 
+            mainPlotHeight = containerHeight - topPadding - xAxisHeight, 
+            // The height of the outlier plot area. 
+            outlierPlotHeight = 0, 
+            // The amount by which the main plot should be shifted downwards within the overall plot area. 
+            // Non-zero if outlier plot is present. 
+            mainPlotOffset = 0;
+            
                 
-                // Remove the old plot and create a fresh viewport. 
-                newSvg = function() {
-                    graphContainer.selectAll("svg").remove();
-                    
-                    return graphContainer.append("svg:svg")
-                        // .attr("width", containerWidth + "px")
-                        // .attr("height", containerHeight + "px");
-                        // .attr("width", "100%").attr("height", "100%");
-                }, 
+            // alert(mainPlotHeight);
+             
             
-                // Retrieve and organize the data behind the Average plot. 
-                collectAverageData = function() {
-                    
-                    
-            
+            // Remove the old plot and create a fresh outer svg container. 
+            // Returns a group within the svg, shifted downwards according to topPadding. 
+            var newPlot = function() {
+                graphContainer.select("#svgplot").remove();
                 
-                }, 
+                // alert(mainPlotHeight);
+                // Set y axis label position relative to the height of the plot. 
+                d3.select("#yaxis-label").style("top", Math.round(mainPlotHeight / 2) + "px");
+               
+                return graphContainer.append("svg:svg").attr("id", "svgplot")
+                    .attr("width", containerWidth + "px")
+                    .attr("height", containerHeight + "px")
+                    .append("g").attr("transform", "translate(0, " + topPadding + ")");
+            }, 
+        
+            // Retrieve and organize the data behind the Average plot. 
+            collectAverageData = function() {
                 
-                // Input should be data in the form of an array of objects, 
-                // along with the key used to identify the values. 
-                // Outputs an array of indices of the elements in the input data array 
-                // that should be considered outliers, if any. 
-                detectOutliers = function(data, valueKey) { 
-                  // The number of values flagged as outliers should not exceed this proportion of the data. 
-                        var MAX_PROP_OUTLIERS = 0.1,
-                        // A value is flagged as an outlier if its distance from the next largest value 
-                        // is larger than this proportion of the maximum value. 
-                        MAX_GAP_PROP = 0.7;
-                        // MAX_GAP_PROP = 0.51;
-                    
-                    // var originalData = data.map(function(d) { return d[valueKey]; });  
-                    var vals = data.map(function(d, i, arr) { 
-                            return {
-                                index: i,
-                                value: d[valueKey]
-                            }; 
-                        }), 
-                        n = vals.length;
-                    
-                    vals.sort(function(a,b) { return a.value - b.value; });
-                    
-                    // Compute the distances between consecutive sorted data values. 
-                    var gaps = [];
-                    vals.reduce(function(prev, curr, i, arr) { 
-                        gaps.push(curr.value - prev.value);
-                        return curr;
-                    });
-                    
-                    
-                    // This will now be the index of the highest value in data currently not flagged as an outlier. 
-                    var upper = n - 1;
-                    // The index of the lowest point to be flagged as an outlier. 
-                    var cutPoint = n;
-                    // If the point at index upper is flagged as an outlier, 
-                    // then the point at upper - 1 (the upper-th point in the array) will become 
-                    // the new highest point not flagged. 
-                    // If the number of points below upper-1 (inclusive) is less than 1 - MAX_PROP_OUTLIERS, 
-                    // do not consider any further points for flagging. 
-                    var stoppingPoint = n * (1 - MAX_PROP_OUTLIERS);
-                    // While no outliers have yet been flagged, and we have not yet considered a large enough proportion of the values: 
-                    while(cutPoint >= n && upper > stoppingPoint) {
-                        // Find the largest gap among the points up to and including upper. 
-                        var indexOfMax = gaps.lastIndexOf(Math.max.apply(null, gaps), upper - 1);
-                        // If this gap is large enough, and not too much data will be flagged: 
-                        if(gaps[indexOfMax] > vals[upper].value * MAX_GAP_PROP && indexOfMax + 1 > stoppingPoint) {
-                            // Flag all points above the upper endpoint of the gap (inclusive) as outliers. 
-                            cutPoint = indexOfMax + 1;
-                        } else {
-                            // Consider only points below the lower endpoint of the gap (inclusive). 
-                            upper = indexOfMax;
-                        }
-                    }
-                    
-                    var outlierIndices = [];
-                    for( ; cutPoint < n; cutPoint++) {
-                        outlierIndices.push(originalData[vals[cutPoint].index]);
-                    }
-                    
-                    return outlierIndices;
                 
-                };
-            
-                       
-            
-          
         
             
-        function drawAveragePlot() {
-   /*     
-            var plotParams = {
+            }, 
+            
+            // Prepares the plot area with axes, gridlines, and background, computing the necessary y axis padding. 
+            // Pass in the plot container, y axis function, and outlier y axis function if available. 
+            setUpPlotArea = function(container, yAxis, yAxisOutlier) {
                 
-                axis: {
-                    // Minimum height of y axis: 5 seconds 
-                    Y_MIN_HEIGHT: 5, 
-                    // Minimum number of dates on the x axis: 2 weeks 
-                    X_MIN_DAYS: 14, 
-                    // Desired number of ticks on the y axis 
-                    Y_NUM_TICKS: 5,
-                    // Desired number of ticks on the y axis for outliers
-                    Y_NUM_TICKS_OUT: 2,
-                }, 
+                var axisElement;
                 
-                points: {
-                    // Minimum point radius 
-                    MIN_POINT_RAD: 2.5,  
-                    // Maximum point radius 
-                    MAX_POINT_RAD: 5, 
-                    // Proportion of space allocated to a single day that the point radius should take
-                    POINT_DAY_PROP: 0.5, 
-                }, 
-                
-                crashes: {
-                    // Proportion of space allocated to a single day that the crash point radius should take
-                    CRASH_DAY_PROP: 0.9, 
-                    // Radius parameter for rounded corners for crash indicators
-                    CRASH_RX: 4, 
-                    // Max number of crashes to be registered on the colour scale 
-                    // Higher numbers of crashes will be capped at this 
-                    CRASH_NUM_CAP: 10, 
-                    // Range to specify for the crash colour scale
-                    CRASH_COL_RANGE: ["#ffc966", "#4c0000"], 
-                    // Height of crash indicator arrow
-                    CRASH_ARROW_HEIGHT: 5,
-                    // Width of crash indicator arrow as a proportion of crash indicator width. 
-                    CRASH_ARROW_WIDTH_PROP: 0.5,
-                }, 
-                
-                outliers: {
-                    // Proportion of plot height that should be dedicated to outliers, if any. 
-                    OUTLIER_PLOT_PROP: 0.25;
-                    // Width of domain to use for outlier plots with a single point (in seconds). 
-                    // OUTLIER_DOMAIN_WIDTH: 3;
+                // Add the y axes to the plot and record the amount of horizontal space they occupy. 
+                if(typeof yAxisOutlier !== "undefined") {
+                    // First handle outlier plot. 
+                    axisElement = container.append("g").attr("class", "y axis").call(yAxisOutlier);
+                    yAxisPadding = Math.max(yAxisPadding, axisElement[0][0].getBBox().width);
                 }
+                
+                axisElement = container.append("g").attr("transform", "translate(0," + mainPlotOffset + ")")
+                    .attr("class", "y axis").call(yAxis);
+                yAxisPadding = Math.max(yAxisPadding, axisElement[0][0].getBBox().width);
+                
+                
                 
             }, 
             
-            plotSpacing = {
-                // Space to allocate for the x axis (ticks and labels)
-                xAxisPadding: 20, 
-                // Padding allocated for the y axis with ticks, but excluding labels. 
-                // yAxisBasePadding: 10,
-                // yAxisPadding: yAxisBasePadding,
-                // Horizontal padding to allocate for the y axis (computed based on tick labels). 
-                yAxisPadding: 0,
-                // Padding to add per digit on the y-axis labels
-                perDigitPadding: 7,
-                // Vertical amount by which the top of the plot (and the y axis) should exceed the highest datapoint.
-                plotTopPadding: 20, 
-                // Vertical amount by which the top of the outlier plot (and the y axis) should exceed the highest datapoint.
-                outlierPlotTopPadding: 15, 
-                // Padding between the left and right edges of the plot and the first and last days
-                datePadding: 20, 
-                // Vertical space to allocate for crash indicator
-                crashHeight: 20, 
-                // Vertical space to add between main plot and outlier plot, if any. 
-                outlierGap: 15, 
-                // Padding to add at top of entire plot - primarily to stop top axis label getting cut off. 
-                topPadding: 5;
-            };
-               
-    */           
-                    // Minimum height of y axis: 5 seconds 
-                var Y_MIN_HEIGHT = 5, 
-                    // Minimum number of dates on the x axis = 2 weeks 
-                    X_MIN_DAYS = 14, 
-                    // Desired number of ticks on the y axis 
-                    Y_NUM_TICKS = 5,
-                    // Desired number of ticks on the y axis for outliers
-                    Y_NUM_TICKS_OUT = 2,
-                    // Minimum point radius 
-                    MIN_POINT_RAD = 2.5,  
-                    // Maximum point radius 
-                    MAX_POINT_RAD = 5, 
-                    // Proportion of space allocated to a single day that the point radius should take
-                    POINT_DAY_PROP = 0.5, 
-                     // Proportion of space allocated to a single day that the crash point radius should take
-                    CRASH_DAY_PROP = 0.9, 
-                    // Radius parameter for rounded corners for crash indicators
-                    CRASH_RX = 4, 
-                    // Max number of crashes to be registered on the colour scale 
-                    // Higher numbers of crashes will be capped at this 
-                    CRASH_NUM_CAP = 10, 
-                    // Range to specify for the crash colour scale
-                    CRASH_COL_RANGE = ["#ffc966", "#4c0000"], 
-                    // Height of crash indicator arrow
-                    CRASH_ARROW_HEIGHT = 5,
-                    // Width of crash indicator arrow as a proportion of crash indicator width. 
-                    CRASH_ARROW_WIDTH_PROP = 0.5,
-                   // Proportion of plot height that should be dedicated to outliers, if any. 
-                    OUTLIER_PLOT_PROP = 0.25;
-                    // Width of domain to use for outlier plots with a single point (in seconds). 
-                    // OUTLIER_DOMAIN_WIDTH = 3;
-               
-                // Space to allocate for the x axis (ticks and labels)
-                var xAxisPadding = 20, 
-                // Padding allocated for the y axis with ticks, but excluding labels. 
-                // yAxisBasePadding = 10,
-                // yAxisPadding = yAxisBasePadding,
-                // Horizontal padding to allocate for the y axis (computed based on tick labels). 
-                yAxisPadding = 0,
-                // Padding to add per digit on the y-axis labels
-                perDigitPadding = 7,
-                // Vertical amount by which the top of the plot (and the y axis) should exceed the highest datapoint.
-                plotTopPadding = 20, 
-                // Vertical amount by which the top of the outlier plot (and the y axis) should exceed the highest datapoint.
-                outlierPlotTopPadding = 15, 
-                // Padding between the left and right edges of the plot and the first and last days
-                datePadding = 20, 
-                // Vertical space to allocate for crash indicator
-                crashHeight = 20, 
-                // Vertical space to add between main plot and outlier plot, if any. 
-                outlierGap = 15, 
-                // Padding to add at top of entire plot - primarily to stop top axis label getting cut off. 
-                topPadding = 5;
-              
+            // Input should be data in the form of an array of objects, 
+            // along with the key used to identify the values. 
+            // Outputs an array of indices of the elements in the input data array 
+            // that should be considered outliers, if any. 
+            detectOutliers = function(data, valueKey) { 
+                // The number of values flagged as outliers should not exceed this proportion of the data. 
+                    var MAX_PROP_OUTLIERS = 0.1,
+                    // A value is flagged as an outlier if its distance from the next largest value 
+                    // is larger than this proportion of the maximum value. 
+                    MAX_GAP_PROP = 0.7;
+                    // MAX_GAP_PROP = 0.51;
                 
+                // var originalData = data.map(function(d) { return d[valueKey]; });  
+                var vals = data.map(function(d, i, arr) { 
+                        return {
+                            index: i,
+                            value: d[valueKey]
+                        }; 
+                    }), 
+                    n = vals.length;
+                
+                vals.sort(function(a,b) { return a.value - b.value; });
+                
+                // Compute the distances between consecutive sorted data values. 
+                var gaps = [];
+                vals.reduce(function(prev, curr, i, arr) { 
+                    gaps.push(curr.value - prev.value);
+                    return curr;
+                });
+                
+                
+                // This will now be the index of the highest value in data currently not flagged as an outlier. 
+                var upper = n - 1;
+                // The index of the lowest point to be flagged as an outlier. 
+                var cutPoint = n;
+                // If the point at index upper is flagged as an outlier, 
+                // then the point at upper - 1 (the upper-th point in the array) will become 
+                // the new highest point not flagged. 
+                // If the number of points below upper-1 (inclusive) is less than 1 - MAX_PROP_OUTLIERS, 
+                // do not consider any further points for flagging. 
+                var stoppingPoint = n * (1 - MAX_PROP_OUTLIERS);
+                // While no outliers have yet been flagged, and we have not yet considered a large enough proportion of the values: 
+                while(cutPoint >= n && upper > stoppingPoint) {
+                    // Find the largest gap among the points up to and including upper. 
+                    var indexOfMax = gaps.lastIndexOf(Math.max.apply(null, gaps), upper - 1);
+                    // If this gap is large enough, and not too much data will be flagged: 
+                    if(gaps[indexOfMax] > vals[upper].value * MAX_GAP_PROP && indexOfMax + 1 > stoppingPoint) {
+                        // Flag all points above the upper endpoint of the gap (inclusive) as outliers. 
+                        cutPoint = indexOfMax + 1;
+                    } else {
+                        // Consider only points below the lower endpoint of the gap (inclusive). 
+                        upper = indexOfMax;
+                    }
+                }
+                
+                var outlierIndices = [];
+                for( ; cutPoint < n; cutPoint++) {
+                    outlierIndices.push(originalData[vals[cutPoint].index]);
+                }
+                
+                return outlierIndices;
+            
+            };
+        
+                   
+        
+      
+        
+            
+        function drawAveragePlot() {
+            // Minimum height of y axis: 5 seconds 
+            var Y_MIN_HEIGHT = 5, 
+                // Minimum number of dates on the x axis = 2 weeks 
+                X_MIN_DAYS = 14, 
+                // Desired number of ticks on the y axis 
+                Y_NUM_TICKS = 5,
+                // Desired number of ticks on the y axis for outliers
+                Y_NUM_TICKS_OUT = 2,
+                // Minimum point radius 
+                MIN_POINT_RAD = 2.5,  
+                // Maximum point radius 
+                MAX_POINT_RAD = 5, 
+                // Proportion of space allocated to a single day that the point radius should take
+                POINT_DAY_PROP = 0.5, 
+                 // Proportion of space allocated to a single day that the crash point radius should take
+                CRASH_DAY_PROP = 0.9, 
+                // Radius parameter for rounded corners for crash indicators
+                CRASH_RX = 4, 
+                // Max number of crashes to be registered on the colour scale 
+                // Higher numbers of crashes will be capped at this 
+                CRASH_NUM_CAP = 10, 
+                // Range to specify for the crash colour scale
+                CRASH_COL_RANGE = ["#ffc966", "#4c0000"], 
+                // Height of crash indicator arrow
+                CRASH_ARROW_HEIGHT = 5,
+                // Width of crash indicator arrow as a proportion of crash indicator width. 
+                CRASH_ARROW_WIDTH_PROP = 0.5,
+               // Proportion of plot height that should be dedicated to outliers, if any. 
+                OUTLIER_PLOT_PROP = 0.25;
+                // Width of domain to use for outlier plots with a single point (in seconds). 
+                // OUTLIER_DOMAIN_WIDTH = 3;
+               
+            // Adjust space to accomodate crash indicator. 
+            mainPlotHeight -= crashHeight;
+            
+            var svg = newPlot();
+            
+            graphContainer.style("border", "1px black solid");
+            
+            // Total amount of space allocated to the plot area, 
+            // including outlier plot, if any, and x-axis.
+            // var totalPlotHeight = containerHeight 
+                // // - xAxisPadding 
+                // - crashHeight - topPadding, 
+            // The amount by which elements of the main plot should be shifted downwards 
+            // within the overall plot group. 
+            // (only non-zero if outlier plot is present). 
+           // var mainPlotOffset = 0; 
+            // The heights of the individual plots, excluding axes. 
+            // outlierPlotHeight = 0;
+            // mainPlotHeight = totalPlotHeight - xAxisPadding;
+            
+            
             var graphData = getGraphData(true);
                     
             // Dates are interpreted as midnight GMT. Change to midnight local time for display purposes. 
             graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
+            
+            
+            //----------------------------
+            
+            // Process data for startup times. 
             
             // Remove dates with medTime undefined or null (means that there was no sessions startups for that day). 
             var startupData = graphData.filter(function(d) { 
@@ -350,23 +345,7 @@ $(function() {
                 return d.medTime != null; 
             });
             
-                
-              
-              // Total amount of space allocated to the plot area, 
-            // including outlier plot, if any, and x-axis.
-           var totalPlotHeight = containerHeight 
-                // - xAxisPadding 
-                - crashHeight - topPadding, 
-            // The amount by which elements of the main plot should be shifted downwards 
-            // within the overall plot group. 
-            // (only non-zero if outlier plot is present). 
-            mainPlotOffset = 0, 
-            // The heights of the individual plots, excluding axes. 
-            outlierPlotHeight = 0, 
-            mainPlotHeight = totalPlotHeight - xAxisPadding;
             
-            
-           
             // Outlier detection. 
             // var outliers = detectOutliers(startupData, "medTime");
             
@@ -388,14 +367,11 @@ $(function() {
             // Collect bounding boxes of the y axes to calculate y axis padding. 
             var bb = [];
             
-               
-            var svg = newSvg();
-            
-            alert(svg.style("width"));
-            // graphContainer.style("border", "1px solid black");
-            
+                // TOOD:  Necessary?
                  // Add group for startup plot, to include startup times plot, outlier plot if required, and all axes. 
-             var   startup = svg.append("g").attr("transform", "translate(0, " + topPadding + ")");
+            var startup = svg;
+                // svg.append("g");
+                // svg.append("g").attr("transform", "translate(0, " + topPadding + ")");
                 
             // If have outliers, allocate space for extra plot. 
             if(outlierData.length > 0) {
@@ -410,7 +386,7 @@ $(function() {
                     .domain(outlierData.length > 1 ? d3.extent(outlierData, function(d) { return d.medTime; }) : 
                         [ Math.floor(outlierData[0].medTime), Math.ceil(outlierData[0].medTime) ]
                     )
-                    .range([outlierPlotHeight - outlierPlotTopPadding, outlierPlotTopPadding]); 
+                    .range([outlierPlotHeight - outlierPlotPadding, outlierPlotPadding]); 
                     // Update scale to incorporate extra space at the top. 
                     yOut.domain([yOut.invert(outlierPlotHeight), yOut.invert(0)]).range([outlierPlotHeight, 0]);
                 
@@ -427,7 +403,7 @@ $(function() {
                     // No offset
                     .attr("class", "y axis")
                     .attr("id", "y-axis-out")
-                    .style("visibility", "hidden")
+                    // .style("visibility", "hidden")
                     .call(yAxisOut)
                 
                 bb.push(document.getElementById("y-axis-out").getBBox());
@@ -447,7 +423,7 @@ $(function() {
                 // Allocate space from 0 to maximum value in dataset. 
                 // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
                 .domain([0, Math.max(Y_MIN_HEIGHT, d3.max(startupData, function(d) { return d.medTime; }))])
-                .range([mainPlotHeight, plotTopPadding]); 
+                .range([mainPlotHeight, mainPlotTopPadding]); 
             // Update scale to incorporate extra space at the top. 
             y.domain([0, y.invert(0)]).range([mainPlotHeight, 0]);
                 
@@ -459,8 +435,10 @@ $(function() {
                 .attr("transform", "translate(0," + mainPlotOffset + ")")
                 .attr("class", "y axis")
                 .attr("id", "y-axis")
-                .style("visibility", "hidden")
+                // .style("visibility", "hidden")
                 .call(yAxis)
+                
+            // alert(ya[0][0].getBBox().width);
                 
             bb.push(document.getElementById("y-axis").getBBox());    
             // alert(d3.max(bb, function(d) { return d.width; }));
@@ -486,7 +464,9 @@ $(function() {
             
     */
             // Remove y axes (re-add later so that it will be drawn on top of the background rect). 
-            startup.selectAll(".y.axis").remove();
+            var sy = startup.selectAll(".y.axis");
+            
+            sy.remove();
             
                 
             //--------------------------------
@@ -496,7 +476,7 @@ $(function() {
             startup.attr("transform", "translate(" + yAxisPadding + ", " + topPadding + ")");
             
             var plotWidth = containerWidth - yAxisPadding;
-            
+            // var plotWidth = containerWidth;
             
             // startup.append("rect").style("stroke","blue")
                 // .attr("width",width-yAxisPadding).attr("height",height-xAxisPadding);
@@ -509,6 +489,7 @@ $(function() {
             mainPlot.append("rect").attr("class", "startup")
                 // .attr("y", mainPlotOffset)
                 .attr("width", plotWidth).attr("height", mainPlotHeight);
+                // .attr("width", "100%").attr("height", "100%");
      
      
             if(outlierData.length > 0) {
@@ -554,7 +535,7 @@ $(function() {
             var x = d3.time.scale()
                 // Allocate space from earliest date in the payload until today.
                 .domain([earliest, d3.time.day(new Date())])
-                .range([datePadding, plotWidth - datePadding]);
+                .range([leftRightPadding, plotWidth - leftRightPadding]);
             // Update scale to add padding on the left and right. 
             x.domain([x.invert(0), x.invert(plotWidth)]).range([0, plotWidth]);
             
@@ -574,7 +555,7 @@ $(function() {
             // Add axes to plot. 
             mainPlot.append("g").attr("class", "gridlines").call(yGrid);
             mainPlot.append("g").attr("class", "y axis").call(yAxis);
-            
+            // ya.style("visibility", "visible");
             
             // Secondary x-axis to show unlabelled ticks for each day. 
             // var xAxisSub = d3.svg.axis()
@@ -774,9 +755,7 @@ $(function() {
                 });
                 
                 
-                // Set y axis label position relative to the height of the plot. 
-                d3.select("#yaxis-label").style("top", Math.round((totalPlotHeight - xAxisPadding) / 2) + "px");
-                
+               
         }
         
         function drawAllPlot() {
