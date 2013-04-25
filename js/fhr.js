@@ -405,7 +405,24 @@ $(function() {
         
         }; 
       
-        
+        // ****************************
+        // Diagnostic. 
+        var inspectData = function(dataArray) {
+            for(var i=0; i < dataArray.length; i++) { 
+                var str = "";
+                for(var k in dataArray[i]) {
+                    str += k + ": " + dataArray[i][k] + ",  ";
+                }
+                console.log(str);
+                str = "";
+                for(var k in dataArray[i].updates) {
+                    str += k + ": " + dataArray[i].updates[k] + ",  ";
+                }
+                console.log(str);
+            }
+        };
+        // ****************************
+       
         // Load the relevant data and display the Average plot. 
         // Data and computed values are not cached - data should refresh on each load. 
         function drawAveragePlot() {
@@ -442,7 +459,7 @@ $(function() {
         
             // Load data. 
             var graphData = getGraphData(true);
-                    
+            
             // Dates are interpreted as midnight GMT. Change to midnight local time for display purposes. 
             graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
             

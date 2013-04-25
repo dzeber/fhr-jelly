@@ -116,22 +116,12 @@ var getGraphData = (function() {
                 };
                 
             if(typeof sessionInfo !== 'undefined' && typeof sessionInfo.firstPaint !== 'undefined') {
-                // Remove nonpositive times. 
-                var paintTimes = sessionInfo.firstPaint.filter(function(elt, ind, arr) { 
-                    return elt > 0 ? true : false;
-                });
-                entry.sessionCount = paintTimes.length;
-                
-                // Compute median and convert to seconds. 
-                if(paintTimes.length > 1) {
-                    entry.medTime = computeMedian(paintTimes) / 1000;
-                } else {
-                    if(paintTimes.length == 1) {
-                        entry.medTime = paintTimes[0] / 1000;
+                // Record all positive times. 
+                sessionInfo.firstPaint.forEach(function(d, i, arr) {
+                    if(d > 0) {
+                        entry.times.push(d);
                     }
-                    // If paintTimes.length == 0, no sessions to record. 
-                    // Do nothing (medTime remains null).
-                }
+                });
             }
             
             return entry;
