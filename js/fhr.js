@@ -88,33 +88,14 @@ $(function() {
     // Generate the plots. 
     var FHRPlot = (function() {
     
-        // ****************************
-        // Diagnostic. 
-        var inspectData = function(dataArray) {
-            for(var i=0; i < dataArray.length; i++) { 
-                var str = "";
-                for(var k in dataArray[i]) {
-                    str += k + ": " + dataArray[i][k] + ",  ";
-                }
-                console.log(str);
-                str = "";
-                for(var k in dataArray[i].updates) {
-                    str += k + ": " + dataArray[i].updates[k] + ",  ";
-                }
-                console.log(str);
-            }
-        };
-        // ****************************
-       
-       
-        var graphContainer = d3.select(".graph"),
+        var graphContainer = d3.select(".graph");
         
-            // Sizing parameters: 
-            
-            // Dimensions of the outer container
-            containerWidth = parseInt(graphContainer.style("width"), 10),
+        
+        // Sizing parameters: 
+        
+        // Dimensions of the outer svg container
+        var containerWidth = parseInt(graphContainer.style("width"), 10),
             containerHeight = parseInt(graphContainer.style("height"), 10),
-            
             // Padding to add at top of entire plot - primarily to stop top axis label getting cut off. 
             topPadding = 5,
             // Vertical space for the x axis (ticks and labels)
@@ -123,7 +104,6 @@ $(function() {
             crashHeight = 20, 
             // Vertical space to add between main plot and outlier plot, if any. 
             outlierGap = 15, 
-            
             // Vertical amount by which the top of the plot (and the y axis) should exceed the highest datapoint.
             mainPlotTopPadding = 20, 
             // Vertical amount by which the top and bottom of the outlier plot (and the y axis) 
@@ -131,17 +111,11 @@ $(function() {
             outlierPlotPadding = 15, 
             // Padding between the left and right edges of the plot and the first and last days
             leftRightPadding = 20; 
-            // Padding allocated for the y axis with ticks, but excluding labels. 
-            // yAxisBasePadding = 10,
-            // yAxisPadding = yAxisBasePadding,
-            // Horizontal padding to allocate for the y axis (computed based on tick labels). 
-            // yAxisPadding = 0;
-            // Padding to add per digit on the y-axis labels
-            // perDigitPadding = 7,
+              
+              
+        // Plot sizing variables to be computed: 
             
-        // Plot sizing variables to be set dynamically. 
-            
-            // The height of the main startup times plot area, excluding axes and the outlier plot, if any. 
+        // The height of the main startup times plot area, excluding axes and the outlier plot, if any. 
         var mainPlotHeight,
             // The height of the outlier plot area. 
             outlierPlotHeight, 
@@ -153,14 +127,14 @@ $(function() {
             // The horizontal space allocated to one day. 
             dayWidth;
             
+            
         // Plot scales. 
-        var x, y, yOut;
-                
-            // alert(mainPlotHeight);
-             
+        var x, y, yOut;  
+        
+        
+        // Plotting functionality:
             
         // Remove the old plot and create a fresh outer svg container. 
-        // Returns a group within the svg, shifted downwards according to topPadding. 
         var newPlot = function() {
             graphContainer.select("#svgplot").remove();
             
@@ -170,47 +144,44 @@ $(function() {
             mainPlotOffset = 0, 
             plotWidth = containerWidth;
             
-            // alert(mainPlotHeight);
             // Set y axis label position relative to the height of the plot. 
             d3.select("#yaxis-label").style("top", Math.round(mainPlotHeight / 2) + "px");
            
             return graphContainer.append("svg:svg").attr("id", "svgplot")
                 .attr("width", containerWidth + "px")
                 .attr("height", containerHeight + "px");
-                // .append("g").attr("transform", "translate(0, " + topPadding + ")");
         }, 
     
-        
-        // Prepares the plot startup plot area. 
-        // Computes the necessary y axis padding, and adds axes, gridlines and background. 
-        // Pass in the plot container, y axis function, and outlier y axis function if available. 
-        // Returns object with pointers to the translated inner container selection, the main plot area selection, 
-        // and the outlier plot area selection, if available. 
+        // Prepare the startup plot area. 
+        // Computes the necessary y axis padding, and adjusts the inner container accordingly. 
+        // Adds value axes, gridlines and background. 
+        // Requires the outer svg container, y axis function, and outlier y axis function if available. 
+        // Returns the d3 selections for the adjusted inner container, the main plot area, and the outlier plot area, if available.  
         setUpPlotArea = function(container, yAxis, yAxisOutlier) {
             
             var innerContainer = container.append("g"), 
-                axisElement, 
                 mainPlotArea, 
-                outlierPlotArea; 
+                result = {}, 
+                axisElement; 
                 
             var yAxisPadding = 0;
             
-            // Add the y axes to the plot and record the amount of horizontal space they occupy. 
+            // Add y axes to the plot and record the amount of horizontal space they occupy. 
+            // Compute padding according to actual space taken by y axis including ticks and labels. 
             if(typeof yAxisOutlier !== "undefined") {
-                // First handle outlier plot. 
                 axisElement = innerContainer.append("g").attr("class", "y axis").call(yAxisOutlier);
                 yAxisPadding = Math.max(yAxisPadding, axisElement[0][0].getBBox().width);
             }
             
-            // Draw the y axis. 
             axisElement = innerContainer.append("g").attr("transform", "translate(0," + mainPlotOffset + ")")
                 .attr("class", "y axis").call(yAxis);
-            // Compute padding according to actual space taken by y axis including ticks and labels. 
             yAxisPadding = Math.max(yAxisPadding, axisElement[0][0].getBBox().width);
             
             // Padding for y axis has now been determined. Make corresponding adjustments. 
             innerContainer.attr("transform", "translate(" + yAxisPadding + ", " + topPadding + ")");
             plotWidth -= yAxisPadding;
+            
+            result["container"] = innerContainer;
             
             // Add group for main plot area. 
             mainPlotArea = innerContainer.insert("g", ":first-child")
@@ -221,27 +192,18 @@ $(function() {
                 .attr("width", plotWidth).attr("height", mainPlotHeight);
             
             // Add gridlines as a separate axis. 
-            // var yGrid = d3.svg.axis().scale(y).orient("left")
-                // .ticks(Y_NUM_TICKS).tickSize(-plotWidth);
             mainPlotArea.append("g").attr("class", "gridlines")
                 .call(yAxis.tickSize(-plotWidth));
-            
-                        
+                
+            result["main"] = mainPlotArea;
+                
             // If have separate outlier plot, follow same steps to create subplot area. 
             if(typeof yAxisOutlier !== "undefined") {
-                outlierPlotArea = innerContainer.insert("g", ":first-child");
+                var outlierPlotArea = innerContainer.insert("g", ":first-child");
                 
                 // Add background and gridlines. 
                 outlierPlotArea.append("rect").attr("class", "plot-background")
                     .attr("width", plotWidth).attr("height", outlierPlotHeight);
-                // yGrid = d3.svg.axis().scale(yOut).orient("left").tickSize(-plotWidth); 
-                // var yAxisOutTickValues = yAxisOutlier.tickValues(); 
-                // // Use specified tick values, if any. 
-                // if(yAxisOutTickValues == null) {
-                    // yGrid.ticks(Y_NUM_TICKS_OUT);
-                // } else {
-                    // yGrid.tickValues(yAxisOutTickValues);
-                // }
                 outlierPlotArea.append("g").attr("class", "gridlines")
                     .call(yAxisOutlier.tickSize(-plotWidth));
             
@@ -252,97 +214,13 @@ $(function() {
                 mainPlotArea.append("line").attr("x1", 0).attr("y1", 0)
                     .attr("x2", plotWidth).attr("y2", 0)
                     .attr("class", "boundary");
+                    
+                result["outlier"] = outlierPlotArea;
             }
             
-            return {
-                container: innerContainer,
-                main: mainPlotArea, 
-                outlier: outlierPlotArea
-            };
-            
+            return result;
         }, 
-        
-        // Input should be data in the form of an array of objects, 
-        // along with the key used to identify the values. 
-        // Outputs an array of indices of the elements in the input data array 
-        // that should be considered outliers, if any. 
-        detectOutliers = function(data, valueKey) { 
-            // The number of values flagged as outliers should not exceed this proportion of the data. 
-            var MAX_PROP_OUTLIERS = 0.1,
-                // A value is flagged as an outlier if its distance from the next largest value 
-                // is larger than this proportion of the maximum value. 
-                MAX_GAP_PROP = 0.7;
-                // MAX_GAP_PROP = 0.51;
                 
-            // var originalData = data.map(function(d) { return d[valueKey]; });  
-            // Create a reduced copy of the dataset to work with. 
-            var vals = data.map(function(d, i, arr) { 
-                    return {
-                        index: i,
-                        value: d[valueKey]
-                    }; 
-                }), 
-                n = vals.length;
-            
-            vals.sort(function(a,b) { return a.value - b.value; });
-            
-            // Compute the distances between consecutive sorted data values. 
-            var gaps = [];
-            // gaps array will have length n-1. 
-            vals.reduce(function(prev, curr, i, arr) { 
-                gaps.push(curr.value - prev.value);
-                return curr;
-            });
-            
-            // Loosely speaking, if there is a large gap between consecutive sorted values, 
-            // flag points on the upper end of the gap as outliers, 
-            // provided there are not too many of them. 
-            
-            // The index of the lowest point in the sorted data to be flagged as an outlier. 
-            var cutPoint = n, 
-                // The index of the highest value in the sorted data currently not flagged as an outlier. 
-                // If the point at index upper is flagged as an outlier, 
-                // then the point at upper - 1 (the upper-th point in the array) will become 
-                // the new highest point not flagged. 
-                upper = n - 1,
-                // If the proportion of points to remain on the main plot is less than 1 - MAX_PROP_OUTLIERS, 
-                // do not consider any further points for flagging. 
-                stoppingPoint = n * (1 - MAX_PROP_OUTLIERS),
-                maxGap, 
-                // The index in the sorted data of the upper endpoint of the largest gap. 
-                indexOfMax;
-                
-            // While no outliers have yet been flagged, and we have not yet considered a large enough proportion of the values: 
-            while(cutPoint >= n && upper > stoppingPoint) {
-                // Find the largest gap among the points up to and including upper. 
-                // This means searching elements 0 to upper-1 of gaps. 
-                maxGap = d3.max(gaps, function(v, i) {
-                    if(i < upper) {
-                        return v;
-                    }
-                    return -1;
-                }); 
-                indexOfMax = gaps.lastIndexOf(maxGap, upper - 1) + 1;
-                // If this gap is large enough, and not too much data will be flagged: 
-                if(maxGap > vals[upper].value * MAX_GAP_PROP && indexOfMax > stoppingPoint) {
-                    // Flag all points above the upper endpoint of the gap (inclusive) as outliers. 
-                    cutPoint = indexOfMax;
-                } else {
-                    // Consider only points below the lower endpoint of the gap (inclusive). 
-                    upper = indexOfMax - 1;
-                }
-            }
-            
-            // Record original data indices of points falling above the cutpoint. 
-            var outlierIndices = [];
-            for( ; cutPoint < n; cutPoint++) {
-                outlierIndices.push(vals[cutPoint].index);
-            }
-            
-            return outlierIndices;
-        
-        }, 
-        
         // Add indicators for version updates. 
         // Draw vertical dotted lines and label with the version numbers. 
         drawVersionUpdates = function(updateData, mainPlot, outlierPlot) {
@@ -351,6 +229,7 @@ $(function() {
                 // Vertical offset of version labels from the top. 
                 LABEL_V_OFFSET = 12;
             
+            // Draw version lines as another axis. 
             var versionUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
                 .tickValues(updateData.map(function(d) { return d.date; }));
                 
@@ -364,10 +243,10 @@ $(function() {
                 .call(versionUpdateAxis.tickSize(-outlierPlotHeight));
             }
                        
-            // Add version labels, vertically. 
-            // Add to outlier plot if present, otherwise add to main plot. 
+            // Add version labels, positioned vertically. 
+            // Add them to outlier plot if present, otherwise add to main plot. 
             var plotToLabel = (typeof outlierPlot !== "undefined") ? outlierPlot : mainPlot;
-            var versionLabels = plotToLabel.selectAll(".version-label text")
+            plotToLabel.selectAll(".version-label text")
                 .data(updateData).enter().append("text").attr("class", "version-label")
                 .attr("x", -LABEL_H_OFFSET).attr("y", function(d) { return x(d.date) + LABEL_V_OFFSET; })
                 .attr("text-anchor", "end").attr("transform", "rotate(-90)")
@@ -424,7 +303,7 @@ $(function() {
                 // Cap maximum number of crashes to register on the scale. 
                 .domain([1, CRASH_NUM_CAP]).range(CRASH_COL_RANGE);
             
-            // Add crash indicators. 
+            // Add crash indicators boxes, leaving space for arrows on top. 
             crashes.selectAll("rect").data(crashData).enter().append("rect")
                 .attr("x", function(d) { return x(d.date) - boxWidth/2; })
                 .attr("y", CRASH_ARROW_HEIGHT).attr("width", boxWidth)
@@ -443,15 +322,92 @@ $(function() {
                 .style("fill", function(d) { 
                     return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
                 });
-        }
-    
-                   
+        }, 
         
+        // Determine which datapoints should be plotted as outliers. 
+        // Input should be data in the form of an array of objects, 
+        // along with the key used to identify the values. 
+        // Outputs an array of indices of the elements in the input data array 
+        // that should be considered outliers, if any. 
+        detectOutliers = function(data, valueKey) { 
+            // The number of values flagged as outliers should not exceed this proportion of the data. 
+            var MAX_PROP_OUTLIERS = 0.1,
+                // A value is flagged as an outlier if its distance from the next largest value 
+                // is larger than this proportion of the maximum value. 
+                MAX_GAP_PROP = 0.7;
+                // MAX_GAP_PROP = 0.51;
+                
+            // Create a reduced copy of the dataset to work with. 
+            var vals = data.map(function(d, i, arr) { 
+                    return {
+                        index: i,
+                        value: d[valueKey]
+                    }; 
+                }), 
+                n = vals.length;
+            
+            vals.sort(function(a,b) { return a.value - b.value; });
+            
+            // Compute the distances between consecutive sorted data values. 
+            var gaps = [];
+            // gaps array will have length n - 1. 
+            vals.reduce(function(prev, curr, i, arr) { 
+                gaps.push(curr.value - prev.value);
+                return curr;
+            });
+            
+            // Loosely speaking, if there is a large gap between consecutive sorted values, 
+            // flag points on the upper end of the gap as outliers, 
+            // provided there are not too many of them. 
+            
+            // The index of the lowest point in the sorted data to be flagged as an outlier. 
+            var cutPoint = n, 
+                // The index of the highest value in the sorted data currently not flagged as an outlier. 
+                // If the point at index upper is flagged as an outlier, 
+                // then the point at upper - 1 (the upper-th point in the array) will become 
+                // the new highest point not flagged. 
+                upper = n - 1,
+                // If the proportion of points to remain on the main plot is less than 1 - MAX_PROP_OUTLIERS, 
+                // do not consider any further points for flagging. 
+                stoppingPoint = n * (1 - MAX_PROP_OUTLIERS),
+                maxGap, 
+                // The index in the sorted data of the upper endpoint of the largest gap. 
+                indexOfMax;
+                
+            // While no outliers have yet been flagged, and we have not yet considered a large enough proportion of the values: 
+            while(cutPoint >= n && upper > stoppingPoint) {
+                // Find the largest gap among the points up to and including upper. 
+                // This means searching elements 0 to upper-1 of gaps. 
+                maxGap = d3.max(gaps, function(v, i) {
+                    if(i < upper) {
+                        return v;
+                    }
+                    return -1;
+                }); 
+                indexOfMax = gaps.lastIndexOf(maxGap, upper - 1) + 1;
+                // If this gap is large enough, and not too much data will be flagged: 
+                if(maxGap > vals[upper].value * MAX_GAP_PROP && indexOfMax > stoppingPoint) {
+                    // Flag all points above the upper endpoint of the gap (inclusive) as outliers. 
+                    cutPoint = indexOfMax;
+                } else {
+                    // Consider only points below the lower endpoint of the gap (inclusive). 
+                    upper = indexOfMax - 1;
+                }
+            }
+            
+            // Record original data indices of points falling above the cutpoint. 
+            var outlierIndices = [];
+            for( ; cutPoint < n; cutPoint++) {
+                outlierIndices.push(vals[cutPoint].index);
+            }
+            
+            return outlierIndices;
+        
+        }; 
       
         
         // Load the relevant data and display the Average plot. 
-        // Data and computed values are not cached - 
-        // data should refresh on each load. 
+        // Data and computed values are not cached - data should refresh on each load. 
         function drawAveragePlot() {
         
             // Minimum height of y axis: 5 seconds 
@@ -472,33 +428,18 @@ $(function() {
                 POINT_DAY_PROP = 0.5, 
                 // Proportion of plot height that should be dedicated to outliers, if any. 
                 OUTLIER_PLOT_PROP = 0.25;
-                // Width of domain to use for outlier plots with a single point (in seconds). 
-                // OUTLIER_DOMAIN_WIDTH = 3;
-               
             
-             // Initialize a new plot container. 
+            
+            // Initialize a new plot container. 
             var svg = newPlot();
             
+        /** Not in v1: 
+        
             // Adjust space to accomodate crash indicator. 
             mainPlotHeight -= crashHeight;
             
-            
-            // graphContainer.style("border", "1px black solid");
-            
-            // Total amount of space allocated to the plot area, 
-            // including outlier plot, if any, and x-axis.
-            // var totalPlotHeight = containerHeight 
-                // // - xAxisPadding 
-                // - crashHeight - topPadding, 
-            // The amount by which elements of the main plot should be shifted downwards 
-            // within the overall plot group. 
-            // (only non-zero if outlier plot is present). 
-            // var mainPlotOffset = 0; 
-            // The heights of the individual plots, excluding axes. 
-            // outlierPlotHeight = 0;
-            // mainPlotHeight = totalPlotHeight - xAxisPadding;
-            
-            
+        */    
+        
             // Load data. 
             var graphData = getGraphData(true);
                     
@@ -506,65 +447,57 @@ $(function() {
             graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
             
             
-            //----------------------------
-            
-            // Process data for startup times. 
-            
+            // Extract startup time data. 
             // Remove dates with medTime undefined or null (means that there was no sessions startups for that day). 
             var startupData = graphData.filter(function(d) { 
                 // return typeof d.medTime !== "undefined" && d.medTime !== null; 
                 return d.medTime != null; 
             });
             
+            // Separate outliers, if any.  
+            var outlierIndices = detectOutliers(startupData, "medTime"), 
+                outlierData = [];
             
-            // Outlier detection. 
-            var outliers = detectOutliers(startupData, "medTime");
-            
-                
-            // If there are outliers, isolate the outlier data. 
-            var outlierData = [];
-            
-            if(outliers.length > 0) { 
-                outliers.forEach(function(d) { 
+            if(outlierIndices.length > 0) { 
+                outlierIndices.forEach(function(d) { 
                     outlierData.push(startupData.splice(d, 1)[0]);
                 });
                 
-                // Adjust sizing variables. 
+                // Adjust sizing variables to accomodate outlier plot. 
                 outlierPlotHeight = mainPlotHeight * OUTLIER_PLOT_PROP;
                 mainPlotOffset = outlierPlotHeight + outlierGap;
                 mainPlotHeight -= mainPlotOffset;
             }
             
-            
-           
-            //--------------------------------
-            
-            
+               
             // Create y axis scales and axes. 
-            // var x, xAxis, y, yAxis, yOut, yAxisOut;
+            
             var yAxis, yAxisOut;
             
             y = d3.scale.linear()
                 // Allocate space from 0 to maximum value in dataset. 
                 // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
-                .domain([0, Math.max(Y_MIN_HEIGHT, d3.max(startupData, function(d) { return d.medTime; }))])
+                .domain([ 0, 
+                    Math.max(Y_MIN_HEIGHT, d3.max(startupData, function(d) { 
+                        return d.medTime; 
+                    }))
+                ])
                 .range([mainPlotHeight, mainPlotTopPadding]); 
             // Update scale to incorporate extra space at the top. 
             y.domain([0, y.invert(0)]).range([mainPlotHeight, 0]);
             
             yAxis = d3.svg.axis().scale(y).orient("left").ticks(Y_NUM_TICKS);
             
-            
             if(outlierData.length > 0) {
                 yOut = d3.scale.linear()
                     // Domain should incorporate outlier values. 
                     // If only a single outlier, pad domain. 
-                    .domain(outlierData.length > 1 ? d3.extent(outlierData, function(d) { return d.medTime; }) : 
-                        [ Math.floor(outlierData[0].medTime), Math.ceil(outlierData[0].medTime) ]
-                    )
-                    .range([outlierPlotHeight - outlierPlotPadding, outlierPlotPadding]); 
-                    // Update scale to incorporate extra space at the top. 
-                yOut.domain([yOut.invert(outlierPlotHeight), yOut.invert(0)])
+                    .domain(outlierData.length > 1 ? d3.extent(outlierData, function(d) {
+                        return d.medTime; 
+                    }) : [ Math.floor(outlierData[0].medTime), Math.ceil(outlierData[0].medTime) ]
+                    ).range([ outlierPlotHeight - outlierPlotPadding, outlierPlotPadding ]); 
+                // Update scale to incorporate extra space at the top. 
+                yOut.domain([ yOut.invert(outlierPlotHeight), yOut.invert(0) ])
                     .range([outlierPlotHeight, 0]);
                     
                 yAxisOut = d3.svg.axis().scale(yOut).orient("left");
@@ -574,175 +507,21 @@ $(function() {
                 } else { 
                     yAxisOut.ticks(Y_NUM_TICKS_OUT);
                 }
-                
             }
             
             
-            //--------------------------------
-            
-            
             // Set up plotting area. 
+            // Need to do this before creating x axis to properly compute plot width. 
             
             // Render y axes to compute necessary padding, and set up background features. 
             var plot = setUpPlotArea(svg, yAxis, yAxisOut);
             
             
-           
-            // Collect bounding boxes of the y axes to calculate y axis padding. 
-            // var bb = [];
-            
-                // TOOD:  Necessary?
-                 // Add group for startup plot, to include startup times plot, outlier plot if required, and all axes. 
-            // var startup = svg;
-                // svg.append("g");
-                // svg.append("g").attr("transform", "translate(0, " + topPadding + ")");
-                
-            // If have outliers, allocate space for extra plot. 
-            // if(outlierData.length > 0) {
-                // outlierPlotHeight = mainPlotHeight * OUTLIER_PLOT_PROP;
-                // mainPlotOffset = outlierPlotHeight + outlierGap;
-                // mainPlotHeight -= mainPlotOffset;
-                
-                // // Compute y scale and axis to be able to get sizing. 
-                // var yOut = d3.scale.linear()
-                    // // Domain should incorporate outlier values. 
-                    // // If only a single outlier, pad domain. 
-                    // .domain(outlierData.length > 1 ? d3.extent(outlierData, function(d) { return d.medTime; }) : 
-                        // [ Math.floor(outlierData[0].medTime), Math.ceil(outlierData[0].medTime) ]
-                    // )
-                    // .range([outlierPlotHeight - outlierPlotPadding, outlierPlotPadding]); 
-                    // // Update scale to incorporate extra space at the top. 
-                    // yOut.domain([yOut.invert(outlierPlotHeight), yOut.invert(0)]).range([outlierPlotHeight, 0]);
-                
-                // var yAxisOut = d3.svg.axis()
-                    // .scale(yOut).orient("left");
-                // if(outlierData.length == 1) { 
-                    // yAxisOut.tickValues([ Math.floor(outlierData[0].medTime), Math.ceil(outlierData[0].medTime) ])
-                        // .tickFormat(d3.format(".0f"));
-                // } else { 
-                    // yAxisOut.ticks(Y_NUM_TICKS_OUT);
-                // }
-                
-                // var yaOut = startup.append("g")
-                    // // No offset
-                    // .attr("class", "y axis")
-                    // .attr("id", "y-axis-out")
-                    // // .style("visibility", "hidden")
-                    // .call(yAxisOut)
-                
-                // bb.push(document.getElementById("y-axis-out").getBBox());
-            // }
-            
-                
-            
-            
-                
-                
-            //--------------------------------
-                
-                
-            // Compute the y scale first and generate the axis. 
-            // Use the sizes of the tick labels to compute the amount of padding to leave for the y axis. 
-            // var y = d3.scale.linear()
-                // // Allocate space from 0 to maximum value in dataset. 
-                // // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
-                // .domain([0, Math.max(Y_MIN_HEIGHT, d3.max(startupData, function(d) { return d.medTime; }))])
-                // .range([mainPlotHeight, mainPlotTopPadding]); 
-            // // Update scale to incorporate extra space at the top. 
-            // y.domain([0, y.invert(0)]).range([mainPlotHeight, 0]);
-                
-            // var yAxis = d3.svg.axis()
-                // .scale(y).orient("left")
-                // .ticks(Y_NUM_TICKS); 
-            
-            // var ya = startup.append("g")
-                // .attr("transform", "translate(0," + mainPlotOffset + ")")
-                // .attr("class", "y axis")
-                // .attr("id", "y-axis")
-                // // .style("visibility", "hidden")
-                // .call(yAxis)
-                
-            // alert(ya[0][0].getBBox().width);
-            // var plotArea = setUpPlotArea(svg, yAxis);
-            
-                
-            // bb.push(document.getElementById("y-axis").getBBox());    
-            // alert(d3.max(bb, function(d) { return d.width; }));
-            
-            // Padding should be the maximum width required by the computed y axis bounding boxes. 
-            // Need computed axis so that ticks are chosen and labelled. 
-            // yAxisPadding = d3.max(bb, function(d) { return d.width; });
-            
-    
-            // Remove y axes (re-add later so that it will be drawn on top of the background rect). 
-            // var sy = startup.selectAll(".y.axis");
-            
-            // sy.remove();
-            
-                
-            //--------------------------------
-                
-            
-            // Add padding to left of plot. 
-            // startup.attr("transform", "translate(" + yAxisPadding + ", " + topPadding + ")");
-            
-            // var plotWidth = containerWidth - yAxisPadding;
-            // var plotWidth = containerWidth;
-            
-            // startup.append("rect").style("stroke","blue")
-                // .attr("width",width-yAxisPadding).attr("height",height-xAxisPadding);
-                
-            // Add main plot features to separate group if necessary to handle offsetting. 
-            // var mainPlot = outlierData.length === 0 ? startup : 
-                // startup.append("g").attr("transform", "translate(0," + mainPlotOffset + ")");
-     
-            // Add background colour.  
-            // mainPlot.append("rect").attr("class", "startup")
-                // .attr("y", mainPlotOffset)
-                // .attr("width", plotWidth).attr("height", mainPlotHeight);
-                // .attr("width", "100%").attr("height", "100%");
-     
-     
-            // if(outlierData.length > 0) {
-                // startup.append("rect").attr("class", "startup")
-                    // .attr("width", plotWidth).attr("height", outlierPlotHeight);
-                    
-                // // Add gridlines as separate axis. 
-                // var yGridOut = d3.svg.axis().scale(yOut).orient("left").tickSize(-plotWidth); 
-                // var yAxisOutTickValues = yAxisOut.tickValues(); 
-                // if(yAxisOutTickValues == null) {
-                    // yGridOut.ticks(Y_NUM_TICKS_OUT);
-                // } else {
-                    // yGridOut.tickValues(yAxisOutTickValues);
-                // }
-
-                // // Add axes to plot. 
-                // startup.append("g").attr("class", "gridlines").call(yGridOut);
-                // startup.append("g").attr("class", "y axis").call(yAxisOut);
-                
-                    
-                // // startup.append("g")
-                    // // .attr("class", "y axis")
-                    // // .call(yAxisOut);
-                    
-                // // Add dotted lines along edges of gap between plots.     
-                // startup.append("polyline")
-                    // .attr("points", "0," + outlierPlotHeight + " " + plotWidth + "," + outlierPlotHeight)
-                    // .attr("class", "boundary");
-                
-                // mainPlot.append("polyline")
-                    // .attr("points", "0,0 " + plotWidth + ",0")
-                    // .attr("class", "boundary");
-                
-            // }
-            
-            
-                
-            
-            
             // Set up scale for dates on x-axis. 
             // If earliest date is less than two weeks ago, set to two weeks ago.
-            var earliest = new Date(Math.min(d3.time.day(d3.time.day.offset(new Date(), -X_MIN_DAYS)), d3.min(graphData, function(d) { return d.date; })));
+            var earliest = new Date(Math.min(d3.time.day(d3.time.day.offset(new Date(), -X_MIN_DAYS)), 
+                d3.min(graphData, function(d) { return d.date; })
+            ));
             x = d3.time.scale()
                 // Allocate space from earliest date in the payload until today.
                 .domain([earliest, d3.time.day(new Date())])
@@ -753,198 +532,36 @@ $(function() {
             // Compute the horizontal space per day. 
             dayWidth = x(d3.time.day.offset(earliest, 1)) - x(earliest);
             
-            // Add axes. 
-            // Main x-axis with ticks labelled according to prettiness. 
-            var xAxis = d3.svg.axis().scale(x).orient("bottom")
-                .tickFormat(d3.time.format("%d"));
-                
+            // Add date axes. 
+            var xAxis = d3.svg.axis().scale(x).orient("bottom");
             
-            // Add gridlines as separate axes. 
-            // var yGrid = d3.svg.axis().scale(y).orient("left")
-                // .ticks(Y_NUM_TICKS).tickSize(-plotWidth); 
-                // // xGrid = d3.svg.axis().scale(x).orient("bottom").tickSize(-plotWidth);
-            
-
-            // Add axes to plot. 
-            // mainPlot.append("g").attr("class", "gridlines").call(yGrid);
-            // mainPlot.append("g").attr("class", "y axis").call(yAxis);
-            // ya.style("visibility", "visible");
-            
-            // Secondary x-axis to show unlabelled ticks for each day. 
-            // var xAxisSub = d3.svg.axis()
-                // .scale(x).orient("bottom")
-                // .ticks(d3.time.days)
-                // .tickFormat("");
-                
-         
+            // Main axis should show only dates. 
             plot.main.append("g").attr("class", "date axis")
-                .attr("transform", "translate(0," + mainPlotHeight + ")").call(xAxis);
+                .attr("transform", "translate(0," + mainPlotHeight + ")")
+                .call(xAxis.tickFormat(d3.time.format("%d")));
+            // Secondary axis should show months.   
             plot.main.append("g").attr("class", "month axis")
                 .attr("transform", "translate(0," + mainPlotHeight + ")")
                 .call(xAxis.ticks(d3.time.months).tickFormat(d3.time.format("%b"))
                     .tickPadding(MONTH_TICK_PADDING));
-            
-                // .append("g").call(xAxisSub);
-               
-            // mainPlot.append("g")
-                // // .attr("transform", "translate(0," + mainPlotOffset + ")")
-                // .attr("class", "y axis")
-                // .call(yAxis)
-                // // .append("g").attr("class", "gridlines")
-                // // .call(yAxis);
-            
-            
-            //--------------------------------
-            
-            // Only retain dates for which a version update occurred. 
-            // var versionUpdateData = graphData.filter(function(d) { 
-                // return typeof d.updates !== "undefined" && typeof d.updates.version !== "undefined"; 
-            // });
-            
+           
+           
             // Add indicators for version updates. 
             drawVersionUpdates(graphData.filter(function(d) { 
                     return typeof d.updates !== "undefined" && typeof d.updates.version !== "undefined"; 
                 }), plot.main, plot.outlier);
             
-            // Testing: 
-            // TODO not working
-            // versionUpdateData.push({ date: d3.time.day(new Date()), updates: { version: "testing" } });
-            // versionUpdateData.push({ date: d3.time.day(new Date("2013-04-03")), updates: { version: "testing" } });
-            // versionUpdateData.push({ date: d3.time.day(new Date("2013-04-05")), updates: { version: "testing" } });
-            // alert(x.domain());
             
-                    
-            // var versionUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
-                // .tickValues(versionUpdateData
-                // // updatesData.filter(
-                    // // function(d) { return typeof d.updates.version !== "undefined"; }
-                // // )
-                    // .map(function(d) { return d.date; })).tickSize(-mainPlotHeight);
-                        
-            // plot.main.append("g").attr("class", "version-update")
-                // .attr("transform", "translate(0," + mainPlotHeight + ")").call(versionUpdateAxis);
-            
-            // if(typeof plot.outlier !== "undefined") { 
-                // plot.outlier.append("g").attr("class", "version-update")
-                // .attr("transform", "translate(0," + outlierPlotHeight + ")")
-                // .call(versionUpdateAxis.tickSize(-outlierPlotHeight));
-            // }
-            
-            
-            
-            
-                
-            // // Add version labels. 
-            // // Add to outlier plot if present, otherwise add to main plot. 
-            // var plotToLabel = (typeof plot.outlier !== "undefined") ? plot.outlier : plot.main;
-            // var versionLabels = plotToLabel.selectAll(".version-label text")
-                // .data(versionUpdateData
-                // // updatesData.filter(function(d) { 
-                    // // return typeof d.updates.version !== "undefined"; 
-                // // })
-                // ).enter().append("text").attr("class", "version-label")
-                // // .attr("x", function(d) { return x(d.date) + LABEL_H_OFFSET; })
-                // // .attr("y", LABEL_V_OFFSET)
-                // .attr("x", -LABEL_H_OFFSET).attr("y", function(d) { return x(d.date) + LABEL_V_OFFSET; })
-                // .attr("text-anchor", "end").attr("transform", "rotate(-90)")
-                // .text(function(d) { return d.updates.version; });
-                
-            // Sort update data by date. 
-            // versionUpdateData.sort(function(a,b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
-            // // Compute boundary x values that displayed version labels should try not to exceed.
-            // var labelBdry = {};
-            // versionUpdateData.forEach(function(d, i, arr) {
-                // // Map current date to x position of next version update indicator 
-                // // or right edge of plot, if none. 
-                // labelBdry[d.date.valueOf()] = 
-                    // (i < versionUpdateData.length - 1) ? x(versionUpdateData[i+1].date) : plotWidth;
-            // });
-            
-            // Find which labels overlap the next version boundary, and rotate. 
-            // versionLabels.filter(function(d) { 
-                // var bb = this.getBBox(); 
-                // return bb.x + bb.width >= labelBdry[d.date.valueOf()];
-            // }).attr("x", -LABEL_H_OFFSET).attr("y", function(d) { return x(d.date) + LABEL_V_OFFSET; })
-                // .attr("text-anchor", "end").attr("transform", "rotate(-90)");
-            
-                
-              
-            
-            // if(typeof plot.outlier !== "undefined") {
-                // plot.outlier.selectAll(".version-label text")
-                // .data(versionUpdateData
-                // // updatesData.filter(function(d) { 
-                    // // return typeof d.updates.version !== "undefined"; 
-                // // })
-                // ).enter().append("text")
-                // .attr("class", "version-label")
-                // .attr("x", function(d) { return x(d.date) + LABEL_H_OFFSET; })
-                // .attr("y", LABEL_V_OFFSET)        
-                // .text(function(d) { return d.updates.version; });
-            // } else {
-                // var labels = plot.main.selectAll(".version-label text").data(updatesData.filter(
-                    // function(d) { return typeof d.updates.version !== "undefined"; }
-                // )).enter().append("text")
-                // .attr("class", "version-label")
-                // .attr("x", function(d) { return x(d.date) + LABEL_H_OFFSET; })
-                // .attr("y", LABEL_V_OFFSET)        
-                // .text(function(d) { return d.updates.version; })
-                // var toRotate = [];
-                // labels.each(function(d, i) { 
-                    // var bb = this.getBBox();
-                    // if (bb.x + bb.width > plotWidth) {
-                        // labels[0][i].attr("fill","red");
-                    // } 
-                // });
-                // ***
-                // .filter(function(d, i) { 
-                    // var bb = this.getBBox();
-                    // return bb.x + bb.width > plotWidth;
-                // })
-                // .attr("x", -LABEL_H_OFFSET)
-                // .attr("y", function(d) { return x(d.date) + LABEL_V_OFFSET; })
-                // .attr("text-anchor", "end")
-                // .attr("transform", "rotate(-90)");
-            // }
-            
-            // var a = d3.selectAll(".version-label");
-            // a.each(function() { alert(this.getBBox().x + this.getBBox().width > plotWidth); });
-     
-            // Build update indicators. 
-    
-            // Retain dates for which the build updated but the version did not. 
-            // var buildUpdateData = graphData.filter(function(d) {
-                // return typeof d.updates !== "undefined" && typeof d.updates.build !== "undefined" && 
-                    // typeof d.updates.version === "undefined"; 
-            // });
-            
+        /** Not in v1
+        
             // Add indicators for build updates. 
             drawBuildUpdates(graphData.filter(function(d) {
                     return typeof d.updates !== "undefined" && typeof d.updates.build !== "undefined" && 
                         typeof d.updates.version === "undefined"; 
                 }), plot.main);
             
-            // var buildUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
-                // .tickValues(buildUpdateData
-                // // updatesData.filter(function(d) { 
-                    // // return typeof d.updates.build !== "undefined" && typeof d.updates.version === "undefined"; 
-                // // })
-                    // .map(function(d) { return d.date; })).tickSize(UPDATE_TICK_LENGTH);
-                
-            // plot.main.append("g").attr("class", "build-update")
-                // .attr("transform", "translate(0," + (mainPlotHeight - UPDATE_TICK_OFFSET) + ")")
-                // .call(buildUpdateAxis);
+        */   
             
-            // if(outlierData.length > 0) { 
-                // startup.append("g").attr("class", "build-update")
-                // .attr("transform", "translate(0," + (outlierPlotHeight - UPDATE_TICK_OFFSET) + ")")
-                // .call(buildUpdateAxis);
-            // }
-            
-          
-                
-            //--------------------------------
-                
             
             // Add points. 
             
@@ -956,63 +573,21 @@ $(function() {
                     .attr("class", "startup-point").attr("r", pointRadius)
                     .attr("cx", function(d) { return x(d.date); })
                     .attr("cy", function(d) { return yOut(d.medTime); });
-                
             }
+            
             plot.main.selectAll("circle").data(startupData).enter().append("circle")
                 .attr("class", "startup-point").attr("r", pointRadius)
                 .attr("cx", function(d) { return x(d.date); })
                 .attr("cy", function(d) { return y(d.medTime); });
             
-                
-            //--------------------------------
-                
+            
+        /** Not in v1. 
+        
             // Add crash indicators.         
             
             drawCrashes(graphData.filter(function(d) { return d.crashCount > 0; }), plot.container);
             
-            // // Group for crash indicators below x axis. 
-            // var crashes = plot.container.append("g")
-                // .attr("transform", "translate(0," + 
-                    // (mainPlotOffset + mainPlotHeight + xAxisHeight) + ")");
-            
-            // // Only retain dates with positive crash count. 
-            // var crashData = graphData.filter(function(d) { return d.crashCount > 0; });
-            
-            // var crashPointHeight = crashHeight - CRASH_ARROW_HEIGHT,
-                // // Scale the indicator width according to the horizontal space allocated per day. 
-                // // Restrict the indicator to be no wider than it is tall. 
-                // crashPointWidth = Math.min(dayWidth * CRASH_DAY_PROP, crashPointWidth), 
-                // // Width of the base of the arrow. 
-                // arrowWidth = pointWidth * CRASH_ARROW_WIDTH_PROP;
-                    
-            // // Set up colour scale for crashes. 
-            // var crashScale = d3.scale.linear()
-                // // Cap maximum number of crashes to register on the scale. 
-                // .domain([1, CRASH_NUM_CAP]).range(CRASH_COL_RANGE);
-            
-            // // Add crash indicators. 
-            // crashes.selectAll("rect").data(crashData).enter().append("rect")
-                // // .attr("class", "crash-point")
-                // .attr("x", function(d) { return x(d.date) - crashPointWidth/2; })
-                // .attr("y", CRASH_ARROW_HEIGHT).attr("width", crashPointWidth)
-                // .attr("height", crashPointHeight).attr("rx", CRASH_RX)
-                // .style("fill", function(d) { 
-                    // return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
-                // });
-            
-            // // Add arrows pointing to x-axis. 
-            // crashes.selectAll("polygon").data(crashData).enter().append("polygon")
-                // // .attr("class", "crash-point")
-                // .attr("points", function(d) { 
-                    // return (x(d.date) - arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
-                        // (x(d.date) + arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
-                        // x(d.date) + ",0";
-                // })
-                // .style("fill", function(d) { 
-                    // return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
-                // });
-    
-                
+        */
                
         }
         
