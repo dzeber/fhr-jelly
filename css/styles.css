@@ -571,20 +571,12 @@ figcaption {
 }
 .plot-background {
 	fill: #e5e5e5; 
-	/* stroke: none */
 }
 .boundary {
 	fill: none;
 	stroke: #7a7a7a;
 	stroke-dasharray: 3,2;
 }
-.crash-point { 
-	/* fill: blue; */
-}
-/* svg {
-    width: 100%;
-    height: 100%; 
-} */
 
 /* --- Panels --- */
 .panelContainer {

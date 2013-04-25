@@ -149,8 +149,12 @@ $(function() {
             // Non-zero if outlier plot is present. 
             mainPlotOffset, 
             // Width of the plot area. 
-            plotWidth;
+            plotWidth, 
+            // The horizontal space allocated to one day. 
+            dayWidth;
             
+        // Plot scales. 
+        var x, y, yOut;
                 
             // alert(mainPlotHeight);
              
@@ -337,7 +341,109 @@ $(function() {
             
             return outlierIndices;
         
-        };
+        }, 
+        
+        // Add indicators for version updates. 
+        // Draw vertical dotted lines and label with the version numbers. 
+        drawVersionUpdates = function(updateData, mainPlot, outlierPlot) {
+            // Horizontal offset of version labels from date. 
+            var LABEL_H_OFFSET = 5, 
+                // Vertical offset of version labels from the top. 
+                LABEL_V_OFFSET = 12;
+            
+            var versionUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
+                .tickValues(updateData.map(function(d) { return d.date; }));
+                
+            mainPlot.append("g").attr("class", "version-update")
+                .attr("transform", "translate(0," + mainPlotHeight + ")")
+                .call(versionUpdateAxis.tickSize(-mainPlotHeight));
+            
+            if(typeof outlierPlot !== "undefined") { 
+                outlierPlot.append("g").attr("class", "version-update")
+                .attr("transform", "translate(0," + outlierPlotHeight + ")")
+                .call(versionUpdateAxis.tickSize(-outlierPlotHeight));
+            }
+                       
+            // Add version labels, vertically. 
+            // Add to outlier plot if present, otherwise add to main plot. 
+            var plotToLabel = (typeof outlierPlot !== "undefined") ? outlierPlot : mainPlot;
+            var versionLabels = plotToLabel.selectAll(".version-label text")
+                .data(updateData).enter().append("text").attr("class", "version-label")
+                .attr("x", -LABEL_H_OFFSET).attr("y", function(d) { return x(d.date) + LABEL_V_OFFSET; })
+                .attr("text-anchor", "end").attr("transform", "rotate(-90)")
+                .text(function(d) { return d.updates.version; });
+        }, 
+        
+        // Add indicators for build updates as extra tick marks on x axis. 
+        drawBuildUpdates = function(updateData, mainPlot) {
+            // Amount by which to raise the build update tick above the x axis. 
+            var UPDATE_TICK_OFFSET = 5, 
+                // Length of the build update tick. 
+                UPDATE_TICK_LENGTH = 10;
+                
+            var buildUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
+                .tickValues(updateData.map(function(d) { return d.date; }))
+                .tickSize(UPDATE_TICK_LENGTH);
+                
+            mainPlot.append("g").attr("class", "build-update")
+                .attr("transform", "translate(0," + (mainPlotHeight - UPDATE_TICK_OFFSET) + ")")
+                .call(buildUpdateAxis);
+        }, 
+        
+        // Add crash indicators.         
+        // Draw as coloured boxes with arrows underneath x axis. 
+        // Intensity of colour indicates number of crashes.             
+        drawCrashes = function(crashData, container) {
+            // Proportion of space allocated to a single day that the crash point radius should take
+            var CRASH_DAY_PROP = 0.9, 
+                // Radius parameter for rounded corners for crash indicators
+                CRASH_RX = 4, 
+                // Max number of crashes to be registered on the colour scale 
+                // Higher numbers of crashes will be capped at this 
+                CRASH_NUM_CAP = 10, 
+                // Range to specify for the crash colour scale
+                CRASH_COL_RANGE = ["#ffc966", "#4c0000"], 
+                // Height of crash indicator arrow
+                CRASH_ARROW_HEIGHT = 5,
+                // Width of crash indicator arrow as a proportion of crash indicator width. 
+                CRASH_ARROW_WIDTH_PROP = 0.5;
+                
+            // Group for crash indicators below x axis. 
+            var crashes = container.append("g")
+                .attr("transform", "translate(0," + (mainPlotOffset + mainPlotHeight + xAxisHeight) + ")");
+             
+            var boxHeight = crashHeight - CRASH_ARROW_HEIGHT,
+                // Scale the indicator width according to the horizontal space allocated per day. 
+                // Restrict the indicator to be no wider than it is tall. 
+                boxWidth = Math.min(dayWidth * CRASH_DAY_PROP, boxHeight), 
+                // Width of the base of the arrow. 
+                arrowWidth = boxWidth * CRASH_ARROW_WIDTH_PROP;
+                    
+            // Set up colour scale for crashes. 
+            var crashScale = d3.scale.linear()
+                // Cap maximum number of crashes to register on the scale. 
+                .domain([1, CRASH_NUM_CAP]).range(CRASH_COL_RANGE);
+            
+            // Add crash indicators. 
+            crashes.selectAll("rect").data(crashData).enter().append("rect")
+                .attr("x", function(d) { return x(d.date) - boxWidth/2; })
+                .attr("y", CRASH_ARROW_HEIGHT).attr("width", boxWidth)
+                .attr("height", boxHeight).attr("rx", CRASH_RX)
+                .style("fill", function(d) { 
+                    return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
+                });
+            
+            // Add arrows pointing to x-axis. 
+            crashes.selectAll("polygon").data(crashData).enter().append("polygon")
+                .attr("points", function(d) { 
+                    return (x(d.date) - arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
+                        (x(d.date) + arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
+                        x(d.date) + ",0";
+                })
+                .style("fill", function(d) { 
+                    return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
+                });
+        }
     
                    
         
@@ -350,42 +456,21 @@ $(function() {
         
             // Minimum height of y axis: 5 seconds 
             var Y_MIN_HEIGHT = 5, 
-                // Minimum number of dates on the x axis = 2 weeks 
-                X_MIN_DAYS = 14, 
                 // Desired number of ticks on the y axis 
                 Y_NUM_TICKS = 5,
                 // Desired number of ticks on the y axis for outliers
                 Y_NUM_TICKS_OUT = 2,
+                // Minimum number of dates on the x axis = 2 weeks 
+                X_MIN_DAYS = 14, 
                 // Padding to use to offset month labels
                 MONTH_TICK_PADDING = 15,
-                // Horizontal offset of version labels from date. 
-                LABEL_H_OFFSET = 5, 
-                // Vertical offset of version labels from the top. 
-                LABEL_V_OFFSET = 12,
-                // Amount by which to raise the build update tick above the x axis. 
-                UPDATE_TICK_OFFSET = 5, 
-                // Length of the build update tick. 
-                UPDATE_TICK_LENGTH = 10,
                 // Minimum point radius 
                 MIN_POINT_RAD = 2.5,  
                 // Maximum point radius 
                 MAX_POINT_RAD = 5, 
                 // Proportion of space allocated to a single day that the point radius should take
                 POINT_DAY_PROP = 0.5, 
-                 // Proportion of space allocated to a single day that the crash point radius should take
-                CRASH_DAY_PROP = 0.9, 
-                // Radius parameter for rounded corners for crash indicators
-                CRASH_RX = 4, 
-                // Max number of crashes to be registered on the colour scale 
-                // Higher numbers of crashes will be capped at this 
-                CRASH_NUM_CAP = 10, 
-                // Range to specify for the crash colour scale
-                CRASH_COL_RANGE = ["#ffc966", "#4c0000"], 
-                // Height of crash indicator arrow
-                CRASH_ARROW_HEIGHT = 5,
-                // Width of crash indicator arrow as a proportion of crash indicator width. 
-                CRASH_ARROW_WIDTH_PROP = 0.5,
-               // Proportion of plot height that should be dedicated to outliers, if any. 
+                // Proportion of plot height that should be dedicated to outliers, if any. 
                 OUTLIER_PLOT_PROP = 0.25;
                 // Width of domain to use for outlier plots with a single point (in seconds). 
                 // OUTLIER_DOMAIN_WIDTH = 3;
@@ -456,7 +541,8 @@ $(function() {
             
             
             // Create y axis scales and axes. 
-            var x, xAxis, y, yAxis, yOut, yAxisOut;
+            // var x, xAxis, y, yAxis, yOut, yAxisOut;
+            var yAxis, yAxisOut;
             
             y = d3.scale.linear()
                 // Allocate space from 0 to maximum value in dataset. 
@@ -466,7 +552,7 @@ $(function() {
             // Update scale to incorporate extra space at the top. 
             y.domain([0, y.invert(0)]).range([mainPlotHeight, 0]);
             
-            yAxis = d3.svg.axis().scale(y).orient("left").ticks(Y_NUM_TICKS); 
+            yAxis = d3.svg.axis().scale(y).orient("left").ticks(Y_NUM_TICKS);
             
             
             if(outlierData.length > 0) {
@@ -657,17 +743,19 @@ $(function() {
             // Set up scale for dates on x-axis. 
             // If earliest date is less than two weeks ago, set to two weeks ago.
             var earliest = new Date(Math.min(d3.time.day(d3.time.day.offset(new Date(), -X_MIN_DAYS)), d3.min(graphData, function(d) { return d.date; })));
-            var x = d3.time.scale()
+            x = d3.time.scale()
                 // Allocate space from earliest date in the payload until today.
                 .domain([earliest, d3.time.day(new Date())])
                 .range([leftRightPadding, plotWidth - leftRightPadding]);
             // Update scale to add padding on the left and right. 
             x.domain([x.invert(0), x.invert(plotWidth)]).range([0, plotWidth]);
             
+            // Compute the horizontal space per day. 
+            dayWidth = x(d3.time.day.offset(earliest, 1)) - x(earliest);
+            
             // Add axes. 
             // Main x-axis with ticks labelled according to prettiness. 
-            var xAxis = d3.svg.axis()
-                .scale(x).orient("bottom")
+            var xAxis = d3.svg.axis().scale(x).orient("bottom")
                 .tickFormat(d3.time.format("%d"));
                 
             
@@ -709,9 +797,14 @@ $(function() {
             //--------------------------------
             
             // Only retain dates for which a version update occurred. 
-            var versionUpdateData = graphData.filter(function(d) { 
-                return typeof d.updates !== "undefined" && typeof d.updates.version !== "undefined"; 
-            });
+            // var versionUpdateData = graphData.filter(function(d) { 
+                // return typeof d.updates !== "undefined" && typeof d.updates.version !== "undefined"; 
+            // });
+            
+            // Add indicators for version updates. 
+            drawVersionUpdates(graphData.filter(function(d) { 
+                    return typeof d.updates !== "undefined" && typeof d.updates.version !== "undefined"; 
+                }), plot.main, plot.outlier);
             
             // Testing: 
             // TODO not working
@@ -721,41 +814,40 @@ $(function() {
             // alert(x.domain());
             
                     
-            var versionUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
-                .tickValues(versionUpdateData
-                // updatesData.filter(
-                    // function(d) { return typeof d.updates.version !== "undefined"; }
-                // )
-                    .map(function(d) { return d.date; })).tickSize(-mainPlotHeight);
+            // var versionUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
+                // .tickValues(versionUpdateData
+                // // updatesData.filter(
+                    // // function(d) { return typeof d.updates.version !== "undefined"; }
+                // // )
+                    // .map(function(d) { return d.date; })).tickSize(-mainPlotHeight);
+                        
+            // plot.main.append("g").attr("class", "version-update")
+                // .attr("transform", "translate(0," + mainPlotHeight + ")").call(versionUpdateAxis);
+            
+            // if(typeof plot.outlier !== "undefined") { 
+                // plot.outlier.append("g").attr("class", "version-update")
+                // .attr("transform", "translate(0," + outlierPlotHeight + ")")
+                // .call(versionUpdateAxis.tickSize(-outlierPlotHeight));
+            // }
+            
+            
+            
+            
                 
-            plot.main.append("g").attr("class", "version-update")
-                .attr("transform", "translate(0," + mainPlotHeight + ")").call(versionUpdateAxis);
-            
-            if(typeof plot.outlier !== "undefined") { 
-                plot.outlier.append("g").attr("class", "version-update")
-                .attr("transform", "translate(0," + outlierPlotHeight + ")")
-                .call(versionUpdateAxis.tickSize(-outlierPlotHeight));
-            }
-            
-            
-            
-            
-            // TODO: handle labelling of adjacent lines. 
-                
-            // Add version labels. 
-            // Add to outlier plot if present, otherwise add to main plot. 
-            var plotToLabel = (typeof plot.outlier !== "undefined") ? plot.outlier : plot.main;
-            var versionLabels = plotToLabel.selectAll(".version-label text")
-                .data(versionUpdateData
-                // updatesData.filter(function(d) { 
-                    // return typeof d.updates.version !== "undefined"; 
-                // })
-                ).enter().append("text").attr("class", "version-label")
-                // .attr("x", function(d) { return x(d.date) + LABEL_H_OFFSET; })
-                // .attr("y", LABEL_V_OFFSET)
-                .attr("x", -LABEL_H_OFFSET).attr("y", function(d) { return x(d.date) + LABEL_V_OFFSET; })
-                .attr("text-anchor", "end").attr("transform", "rotate(-90)")
-                .text(function(d) { return d.updates.version; });
+            // // Add version labels. 
+            // // Add to outlier plot if present, otherwise add to main plot. 
+            // var plotToLabel = (typeof plot.outlier !== "undefined") ? plot.outlier : plot.main;
+            // var versionLabels = plotToLabel.selectAll(".version-label text")
+                // .data(versionUpdateData
+                // // updatesData.filter(function(d) { 
+                    // // return typeof d.updates.version !== "undefined"; 
+                // // })
+                // ).enter().append("text").attr("class", "version-label")
+                // // .attr("x", function(d) { return x(d.date) + LABEL_H_OFFSET; })
+                // // .attr("y", LABEL_V_OFFSET)
+                // .attr("x", -LABEL_H_OFFSET).attr("y", function(d) { return x(d.date) + LABEL_V_OFFSET; })
+                // .attr("text-anchor", "end").attr("transform", "rotate(-90)")
+                // .text(function(d) { return d.updates.version; });
                 
             // Sort update data by date. 
             // versionUpdateData.sort(function(a,b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
@@ -818,24 +910,30 @@ $(function() {
             // var a = d3.selectAll(".version-label");
             // a.each(function() { alert(this.getBBox().x + this.getBBox().width > plotWidth); });
      
-    // Build update indicators. 
-    /*
+            // Build update indicators. 
+    
             // Retain dates for which the build updated but the version did not. 
-            var buildUpdateData = graphData.filter(function(d) {
-                return typeof d.updates !== "undefined" && typeof d.updates.build !== "undefined" && 
-                    typeof d.updates.version === "undefined"; 
-            });
+            // var buildUpdateData = graphData.filter(function(d) {
+                // return typeof d.updates !== "undefined" && typeof d.updates.build !== "undefined" && 
+                    // typeof d.updates.version === "undefined"; 
+            // });
             
-            var buildUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
-                .tickValues(buildUpdateData
-                // updatesData.filter(function(d) { 
-                    // return typeof d.updates.build !== "undefined" && typeof d.updates.version === "undefined"; 
-                // })
-                    .map(function(d) { return d.date; })).tickSize(UPDATE_TICK_LENGTH);
+            // Add indicators for build updates. 
+            drawBuildUpdates(graphData.filter(function(d) {
+                    return typeof d.updates !== "undefined" && typeof d.updates.build !== "undefined" && 
+                        typeof d.updates.version === "undefined"; 
+                }), plot.main);
+            
+            // var buildUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
+                // .tickValues(buildUpdateData
+                // // updatesData.filter(function(d) { 
+                    // // return typeof d.updates.build !== "undefined" && typeof d.updates.version === "undefined"; 
+                // // })
+                    // .map(function(d) { return d.date; })).tickSize(UPDATE_TICK_LENGTH);
                 
-            plot.main.append("g").attr("class", "build-update")
-                .attr("transform", "translate(0," + (mainPlotHeight - UPDATE_TICK_OFFSET) + ")")
-                .call(buildUpdateAxis);
+            // plot.main.append("g").attr("class", "build-update")
+                // .attr("transform", "translate(0," + (mainPlotHeight - UPDATE_TICK_OFFSET) + ")")
+                // .call(buildUpdateAxis);
             
             // if(outlierData.length > 0) { 
                 // startup.append("g").attr("class", "build-update")
@@ -843,7 +941,7 @@ $(function() {
                 // .call(buildUpdateAxis);
             // }
             
-    */      
+          
                 
             //--------------------------------
                 
@@ -851,9 +949,7 @@ $(function() {
             // Add points. 
             
             // Scale the point radius according to the horizontal space allocated per day. 
-            var pointRadius = Math.min(Math.max(
-                (x(d3.time.day.offset(earliest, 1)) - x(earliest)) * POINT_DAY_PROP, 
-                MIN_POINT_RAD), MAX_POINT_RAD); 
+            var pointRadius = Math.min(Math.max(dayWidth * POINT_DAY_PROP, MIN_POINT_RAD), MAX_POINT_RAD); 
                          
             if(outlierData.length > 0) {
                 plot.outlier.selectAll("circle").data(outlierData).enter().append("circle")
@@ -871,46 +967,51 @@ $(function() {
             //--------------------------------
                 
             // Add crash indicators.         
-    /*        
-            // Group for crash indicators below x axis. 
-            var crashes = plot.container.append("g")
-                .attr("transform", "translate(0," + 
-                    (mainPlotOffset + mainPlotHeight + xAxisHeight) + ")");
             
-            // Only retain dates with positive crash count. 
-            var crashData = graphData.filter(function(d) { return d.crashCount > 0; });
+            drawCrashes(graphData.filter(function(d) { return d.crashCount > 0; }), plot.container);
             
-            // Scale the point width according to the horizontal space allocated per day. 
-            var pointWidth = Math.min((x(d3.time.day.offset(earliest, 1)) - x(earliest)) * CRASH_DAY_PROP, crashHeight - CRASH_ARROW_HEIGHT);
-            // Width of the base of the arrow. 
-            var arrowWidth = pointWidth * CRASH_ARROW_WIDTH_PROP;
+            // // Group for crash indicators below x axis. 
+            // var crashes = plot.container.append("g")
+                // .attr("transform", "translate(0," + 
+                    // (mainPlotOffset + mainPlotHeight + xAxisHeight) + ")");
+            
+            // // Only retain dates with positive crash count. 
+            // var crashData = graphData.filter(function(d) { return d.crashCount > 0; });
+            
+            // var crashPointHeight = crashHeight - CRASH_ARROW_HEIGHT,
+                // // Scale the indicator width according to the horizontal space allocated per day. 
+                // // Restrict the indicator to be no wider than it is tall. 
+                // crashPointWidth = Math.min(dayWidth * CRASH_DAY_PROP, crashPointWidth), 
+                // // Width of the base of the arrow. 
+                // arrowWidth = pointWidth * CRASH_ARROW_WIDTH_PROP;
                     
-            // Set up colour scale for crashes. 
-            var crashScale = d3.scale.linear()
-                // Cap maximum number of crashes to register on the scale. 
-                .domain([1, CRASH_NUM_CAP]).range(CRASH_COL_RANGE);
+            // // Set up colour scale for crashes. 
+            // var crashScale = d3.scale.linear()
+                // // Cap maximum number of crashes to register on the scale. 
+                // .domain([1, CRASH_NUM_CAP]).range(CRASH_COL_RANGE);
             
-            // Add crash indicators. 
-            crashes.selectAll("rect").data(crashData).enter().append("rect")
-                // .attr("class", "crash-point")
-                .attr("x", function(d) { return x(d.date) - pointWidth/2; }).attr("y", CRASH_ARROW_HEIGHT)
-                .attr("width", pointWidth).attr("height", crashHeight - CRASH_ARROW_HEIGHT)
-                .attr("rx", CRASH_RX).style("fill", function(d) { 
-                    return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
-                });
+            // // Add crash indicators. 
+            // crashes.selectAll("rect").data(crashData).enter().append("rect")
+                // // .attr("class", "crash-point")
+                // .attr("x", function(d) { return x(d.date) - crashPointWidth/2; })
+                // .attr("y", CRASH_ARROW_HEIGHT).attr("width", crashPointWidth)
+                // .attr("height", crashPointHeight).attr("rx", CRASH_RX)
+                // .style("fill", function(d) { 
+                    // return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
+                // });
             
-            // Add arrows pointing to x-axis. 
-            crashes.selectAll("polygon").data(crashData).enter().append("polygon")
-                // .attr("class", "crash-point")
-                .attr("points", function(d) { 
-                    return (x(d.date) - arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
-                        (x(d.date) + arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
-                        x(d.date) + ",0";
-                })
-                .style("fill", function(d) { 
-                    return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
-                });
-     */           
+            // // Add arrows pointing to x-axis. 
+            // crashes.selectAll("polygon").data(crashData).enter().append("polygon")
+                // // .attr("class", "crash-point")
+                // .attr("points", function(d) { 
+                    // return (x(d.date) - arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
+                        // (x(d.date) + arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
+                        // x(d.date) + ",0";
+                // })
+                // .style("fill", function(d) { 
+                    // return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
+                // });
+    
                 
                
         }
