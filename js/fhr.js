@@ -358,6 +358,14 @@ $(function() {
                 Y_NUM_TICKS_OUT = 2,
                 // Padding to use to offset month labels
                 MONTH_TICK_PADDING = 15,
+                // Horizontal offset of version labels from date. 
+                LABEL_H_OFFSET = 5, 
+                // Vertical offset of version labels from the top. 
+                LABEL_V_OFFSET = 12,
+                // Amount by which to raise the build update tick above the x axis. 
+                UPDATE_TICK_OFFSET = 5, 
+                // Length of the build update tick. 
+                UPDATE_TICK_LENGTH = 10,
                 // Minimum point radius 
                 MIN_POINT_RAD = 2.5,  
                 // Maximum point radius 
@@ -700,21 +708,25 @@ $(function() {
             
             //--------------------------------
             
-            // Only retain dates for which an update occurred. 
-            var updatesData = graphData.filter(function(d) { return typeof d.updates !== "undefined"; });
-            
-            // TODO instead create versionUpdateData and buildUpdateData. 
+            // Only retain dates for which a version update occurred. 
+            var versionUpdateData = graphData.filter(function(d) { 
+                return typeof d.updates !== "undefined" && typeof d.updates.version !== "undefined"; 
+            });
             
             // Testing: 
-            updatesData.push({ date: d3.time.day(new Date()), updates: { version: "testing" } });
+            // TODO not working
+            // versionUpdateData.push({ date: d3.time.day(new Date()), updates: { version: "testing" } });
+            // versionUpdateData.push({ date: d3.time.day(new Date("2013-04-03")), updates: { version: "testing" } });
+            // versionUpdateData.push({ date: d3.time.day(new Date("2013-04-05")), updates: { version: "testing" } });
             // alert(x.domain());
             
-            // inspectData(updatesData);
                     
             var versionUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
-                .tickValues(updatesData.filter(
-                    function(d) { return typeof d.updates.version !== "undefined"; }
-                ).map(function(d) { return d.date; })).tickSize(-mainPlotHeight);
+                .tickValues(versionUpdateData
+                // updatesData.filter(
+                    // function(d) { return typeof d.updates.version !== "undefined"; }
+                // )
+                    .map(function(d) { return d.date; })).tickSize(-mainPlotHeight);
                 
             plot.main.append("g").attr("class", "version-update")
                 .attr("transform", "translate(0," + mainPlotHeight + ")").call(versionUpdateAxis);
@@ -725,29 +737,66 @@ $(function() {
                 .call(versionUpdateAxis.tickSize(-outlierPlotHeight));
             }
             
-            var LABEL_H_OFFSET = 5, 
-                LABEL_V_OFFSET = 12;
+            
+            
             
             // TODO: handle labelling of adjacent lines. 
                 
             // Add version labels. 
-            if(typeof plot.outlier !== "undefined") {
-                plot.outlier.selectAll(".version-label text")
-                .data(updatesData.filter(function(d) { 
-                    return typeof d.updates.version !== "undefined"; 
-                })).enter().append("text")
-                .attr("class", "version-label")
-                .attr("x", function(d) { return x(d.date) + LABEL_H_OFFSET; })
-                .attr("y", LABEL_V_OFFSET)        
+            // Add to outlier plot if present, otherwise add to main plot. 
+            var plotToLabel = (typeof plot.outlier !== "undefined") ? plot.outlier : plot.main;
+            var versionLabels = plotToLabel.selectAll(".version-label text")
+                .data(versionUpdateData
+                // updatesData.filter(function(d) { 
+                    // return typeof d.updates.version !== "undefined"; 
+                // })
+                ).enter().append("text").attr("class", "version-label")
+                // .attr("x", function(d) { return x(d.date) + LABEL_H_OFFSET; })
+                // .attr("y", LABEL_V_OFFSET)
+                .attr("x", -LABEL_H_OFFSET).attr("y", function(d) { return x(d.date) + LABEL_V_OFFSET; })
+                .attr("text-anchor", "end").attr("transform", "rotate(-90)")
                 .text(function(d) { return d.updates.version; });
-            } else {
-                var labels = plot.main.selectAll(".version-label text").data(updatesData.filter(
-                    function(d) { return typeof d.updates.version !== "undefined"; }
-                )).enter().append("text")
-                .attr("class", "version-label")
-                .attr("x", function(d) { return x(d.date) + LABEL_H_OFFSET; })
-                .attr("y", LABEL_V_OFFSET)        
-                .text(function(d) { return d.updates.version; })
+                
+            // Sort update data by date. 
+            // versionUpdateData.sort(function(a,b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+            // // Compute boundary x values that displayed version labels should try not to exceed.
+            // var labelBdry = {};
+            // versionUpdateData.forEach(function(d, i, arr) {
+                // // Map current date to x position of next version update indicator 
+                // // or right edge of plot, if none. 
+                // labelBdry[d.date.valueOf()] = 
+                    // (i < versionUpdateData.length - 1) ? x(versionUpdateData[i+1].date) : plotWidth;
+            // });
+            
+            // Find which labels overlap the next version boundary, and rotate. 
+            // versionLabels.filter(function(d) { 
+                // var bb = this.getBBox(); 
+                // return bb.x + bb.width >= labelBdry[d.date.valueOf()];
+            // }).attr("x", -LABEL_H_OFFSET).attr("y", function(d) { return x(d.date) + LABEL_V_OFFSET; })
+                // .attr("text-anchor", "end").attr("transform", "rotate(-90)");
+            
+                
+              
+            
+            // if(typeof plot.outlier !== "undefined") {
+                // plot.outlier.selectAll(".version-label text")
+                // .data(versionUpdateData
+                // // updatesData.filter(function(d) { 
+                    // // return typeof d.updates.version !== "undefined"; 
+                // // })
+                // ).enter().append("text")
+                // .attr("class", "version-label")
+                // .attr("x", function(d) { return x(d.date) + LABEL_H_OFFSET; })
+                // .attr("y", LABEL_V_OFFSET)        
+                // .text(function(d) { return d.updates.version; });
+            // } else {
+                // var labels = plot.main.selectAll(".version-label text").data(updatesData.filter(
+                    // function(d) { return typeof d.updates.version !== "undefined"; }
+                // )).enter().append("text")
+                // .attr("class", "version-label")
+                // .attr("x", function(d) { return x(d.date) + LABEL_H_OFFSET; })
+                // .attr("y", LABEL_V_OFFSET)        
+                // .text(function(d) { return d.updates.version; })
                 // var toRotate = [];
                 // labels.each(function(d, i) { 
                     // var bb = this.getBBox();
@@ -755,32 +804,36 @@ $(function() {
                         // labels[0][i].attr("fill","red");
                     // } 
                 // });
-                .filter(function(d, i) { 
-                    var bb = this.getBBox();
-                    return bb.x + bb.width > plotWidth;
-                })
-                .attr("x", -LABEL_H_OFFSET)
-                .attr("y", function(d) { return x(d.date) + LABEL_V_OFFSET; })
-                .attr("text-anchor", "end")
-                .attr("transform", "rotate(-90)");
-            }
+                // ***
+                // .filter(function(d, i) { 
+                    // var bb = this.getBBox();
+                    // return bb.x + bb.width > plotWidth;
+                // })
+                // .attr("x", -LABEL_H_OFFSET)
+                // .attr("y", function(d) { return x(d.date) + LABEL_V_OFFSET; })
+                // .attr("text-anchor", "end")
+                // .attr("transform", "rotate(-90)");
+            // }
             
             // var a = d3.selectAll(".version-label");
             // a.each(function() { alert(this.getBBox().x + this.getBBox().width > plotWidth); });
-            
-            
-            var UPDATE_TICK_OFFSET = 5, 
-                UPDATE_TICK_LENGTH = 10;
-            
+     
+    // Build update indicators. 
+    /*
+            // Retain dates for which the build updated but the version did not. 
+            var buildUpdateData = graphData.filter(function(d) {
+                return typeof d.updates !== "undefined" && typeof d.updates.build !== "undefined" && 
+                    typeof d.updates.version === "undefined"; 
+            });
             
             var buildUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
-                .tickValues(updatesData.filter(
-                    function(d) { 
-                        return typeof d.updates.build !== "undefined" && typeof d.updates.version === "undefined"; }
-                ).map(function(d) { return d.date; }))
-                .tickSize(UPDATE_TICK_LENGTH);
+                .tickValues(buildUpdateData
+                // updatesData.filter(function(d) { 
+                    // return typeof d.updates.build !== "undefined" && typeof d.updates.version === "undefined"; 
+                // })
+                    .map(function(d) { return d.date; })).tickSize(UPDATE_TICK_LENGTH);
                 
-            mainPlot.append("g").attr("class", "build-update")
+            plot.main.append("g").attr("class", "build-update")
                 .attr("transform", "translate(0," + (mainPlotHeight - UPDATE_TICK_OFFSET) + ")")
                 .call(buildUpdateAxis);
             
@@ -790,7 +843,7 @@ $(function() {
                 // .call(buildUpdateAxis);
             // }
             
-            
+    */      
                 
             //--------------------------------
                 
@@ -801,40 +854,28 @@ $(function() {
             var pointRadius = Math.min(Math.max(
                 (x(d3.time.day.offset(earliest, 1)) - x(earliest)) * POINT_DAY_PROP, 
                 MIN_POINT_RAD), MAX_POINT_RAD); 
-                    
+                         
             if(outlierData.length > 0) {
-                // for(var i=0; i<outlierData.length; i++) { 
-                    // alert(outlierData[i].medTime + " : " + yOut(outlierData[i].medTime));
-                // }
-                // alert(yOut.domain()); 
-                // alert(yOut.range()); 
-                
-                startup.selectAll("circle").data(outlierData).enter().append("circle")
-                    .attr("class", "startup-point")
-                    .attr("r", pointRadius)
+                plot.outlier.selectAll("circle").data(outlierData).enter().append("circle")
+                    .attr("class", "startup-point").attr("r", pointRadius)
                     .attr("cx", function(d) { return x(d.date); })
-                    .attr("cy", function(d) { return yOut(d.medTime); })
+                    .attr("cy", function(d) { return yOut(d.medTime); });
                 
             }
-            // for(var i=0; i<startupData.length; i++) { 
-                // alert(startupData[i].medTime + " : " + y(startupData[i].medTime));
-            // }
-            mainPlot
-                // .append("g").attr("transform", "translate(0," + mainPlotOffset + ")")
-                .selectAll("circle").data(startupData).enter().append("circle")
-                .attr("class", "startup-point")
-                .attr("r", pointRadius)
+            plot.main.selectAll("circle").data(startupData).enter().append("circle")
+                .attr("class", "startup-point").attr("r", pointRadius)
                 .attr("cx", function(d) { return x(d.date); })
-                .attr("cy", function(d) { return y(d.medTime); })
+                .attr("cy", function(d) { return y(d.medTime); });
             
                 
             //--------------------------------
                 
             // Add crash indicators.         
-            
+    /*        
             // Group for crash indicators below x axis. 
-            var crashes = svg.append("g").attr("transform", 
-                "translate(" + yAxisPadding + "," + (containerHeight - crashHeight) + ")");
+            var crashes = plot.container.append("g")
+                .attr("transform", "translate(0," + 
+                    (mainPlotOffset + mainPlotHeight + xAxisHeight) + ")");
             
             // Only retain dates with positive crash count. 
             var crashData = graphData.filter(function(d) { return d.crashCount > 0; });
@@ -847,26 +888,19 @@ $(function() {
             // Set up colour scale for crashes. 
             var crashScale = d3.scale.linear()
                 // Cap maximum number of crashes to register on the scale. 
-                .domain([1, CRASH_NUM_CAP])
-                .range(CRASH_COL_RANGE);
+                .domain([1, CRASH_NUM_CAP]).range(CRASH_COL_RANGE);
             
             // Add crash indicators. 
-            crashes.selectAll("rect")
-                .data(crashData).enter() 
-                .append("rect")
+            crashes.selectAll("rect").data(crashData).enter().append("rect")
                 // .attr("class", "crash-point")
-                .attr("x", function(d) { return x(d.date) - pointWidth/2; })
-                .attr("y", CRASH_ARROW_HEIGHT)
+                .attr("x", function(d) { return x(d.date) - pointWidth/2; }).attr("y", CRASH_ARROW_HEIGHT)
                 .attr("width", pointWidth).attr("height", crashHeight - CRASH_ARROW_HEIGHT)
-                .attr("rx", CRASH_RX)
-                .style("fill", function(d) { 
+                .attr("rx", CRASH_RX).style("fill", function(d) { 
                     return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
                 });
             
             // Add arrows pointing to x-axis. 
-            crashes.selectAll("polygon")
-                .data(crashData).enter() 
-                .append("polygon")
+            crashes.selectAll("polygon").data(crashData).enter().append("polygon")
                 // .attr("class", "crash-point")
                 .attr("points", function(d) { 
                     return (x(d.date) - arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
@@ -876,7 +910,7 @@ $(function() {
                 .style("fill", function(d) { 
                     return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
                 });
-                
+     */           
                 
                
         }
