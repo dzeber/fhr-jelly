@@ -8,12 +8,135 @@ var ONE_DAY = 1000 * 60 * 60 * 24,
 
 
 // The function to retrieve relevant data from to be plotted from the payload.
-// Takes boolean argument indicating whether or not data should be for the "Average" plot.     
+// Takes boolean argument indicating whether or not data should be for the "Average" plot.
+// For Average plot, data has the form: 
+/* 
+    graphData = [ 
+        // Data for a single day is an object: 
+        { 
+            // Date object 
+            date : '1360108800000', 
+            // Number of session startups on this day (>= 0) 
+            sessionCount : 5, 
+            // Median startup time in seconds (or null if sessionCount == 0)
+            medTime : 23, 
+            // Number of crashes on this day (>= 0)
+            crashCount : 2, 
+            // Empty object unless an update occurred on this day 
+            updates : {
+                // Latest build installed on this day, 
+                // or undefined if build was not updated. 
+                build : '2013031243427', 
+                // Latest app version installed on this day, 
+                // or undefined if version was not updated. 
+                version: '23.0a1'
+            } 
+        }, 
+        {
+            ...
+        }, 
+        ...
+    ]
+*/
+// For All plot, data has the form: 
+/* 
+    graphData = [ 
+        // Data for a single day is an object: 
+        { 
+            // Date object 
+            date : '1360108800000', 
+            // Array of startup times in seconds for this day
+            times : [ 10, 3, 4, 8 ],
+            // Number of crashes on this day (>= 0)
+            crashCount : 2, 
+            // Empty object unless an update occurred on this day 
+            updates : {
+                // Latest build installed on this day, 
+                // or undefined if build was not updated. 
+                build : '2013031243427', 
+                // Latest app version installed on this day, 
+                // or undefined if version was not updated. 
+                version: '23.0a1'
+            } 
+        }, 
+        {
+            ...
+        }, 
+        ...
+    ]
+*/        
 var getGraphData = (function() {
     
     // Maximum number of days to display on the Average plot. 
     var MAX_DAYS_AVG = 90, 
-
+        // Maximum number of days to display on the All plot. 
+        MAX_DAYS_ALL = 14;
+    
+    // Create a new entry and collect the current day's startup data for the Average plot. 
+    // Record median firstPaint time and number of sessions, if any. 
+    var newPopulatedAvgEntry = function(sessionInfo, currentDate) {
+            var entry = { 
+                    "date" : currentDate, 
+                    "sessionCount" : 0,
+                    "medTime" : null,
+                    "crashCount" : 0,
+                    "updates" : {}
+                };
+        
+            if(typeof sessionInfo !== 'undefined' && typeof sessionInfo.firstPaint !== 'undefined') {
+                // Remove nonpositive times. 
+                var paintTimes = sessionInfo.firstPaint.filter(function(elt, ind, arr) { 
+                    return elt > 0 ? true : false;
+                });
+                entry.sessionCount = paintTimes.length;
+                
+                // Compute median and convert to seconds. 
+                if(paintTimes.length > 1) {
+                    entry.medTime = computeMedian(paintTimes) / 1000;
+                } else {
+                    if(paintTimes.length == 1) {
+                        entry.medTime = paintTimes[0] / 1000;
+                    }
+                    // If paintTimes.length == 0, no sessions to record. 
+                    // Do nothing (medTime remains null).
+                }
+            }
+            
+            return entry;
+        },
+        
+        // Create a new entry and collect the current day's startup data for the All plot. 
+        // Record array of firstPaint times. 
+        newPopulatedAllEntry = function(sessionInfo, currentDate) {
+            var entry = { 
+                    "date" : currentDate, 
+                    "times" : [],
+                    "crashCount" : 0,
+                    "updates" : {}
+                };
+                
+            if(typeof sessionInfo !== 'undefined' && typeof sessionInfo.firstPaint !== 'undefined') {
+                // Remove nonpositive times. 
+                var paintTimes = sessionInfo.firstPaint.filter(function(elt, ind, arr) { 
+                    return elt > 0 ? true : false;
+                });
+                entry.sessionCount = paintTimes.length;
+                
+                // Compute median and convert to seconds. 
+                if(paintTimes.length > 1) {
+                    entry.medTime = computeMedian(paintTimes) / 1000;
+                } else {
+                    if(paintTimes.length == 1) {
+                        entry.medTime = paintTimes[0] / 1000;
+                    }
+                    // If paintTimes.length == 0, no sessions to record. 
+                    // Do nothing (medTime remains null).
+                }
+            }
+            
+            return entry;
+        },
+        
         // Computes the median of a set of values.
         computeMedian = function(values) {
             values.sort( function(a,b) {return a - b;} );
@@ -22,126 +145,68 @@ var getGraphData = (function() {
                 return values[half];
             else
                 return (values[half-1] + values[half]) / 2;
-        },
-
-        // Collects data to be plotted on Average plot. 
-        // Returns array of objects of the form: 
-        /* 
-        graphData = [ 
-            // Data for a single day is an object: 
-            { 
-                // Date object 
-                date : '1360108800000', 
-                // Number of session startups on this day (>= 0) 
-                sessionCount : 5, 
-                // Median startup time (or null if sessionCount == 0)
-                medTime : 23, 
-                // Number of crashes on this day (>= 0)
-                crashCount : 2, 
-                // Empty object unless an update occurred on this day 
-                updates : {
-                    // Latest build installed on this day, 
-                    // or undefined if build was not updated. 
-                    build : '2013031243427', 
-                    // Latest app version installed on this day, 
-                    // or undefined if version was not updated. 
-                    version: '23.0a1'
-                } 
-            }, 
-            {
-                ...
-            }, 
-            ...
-        ]
-        */
-        getAverageGraphData = function() {
-            if(!payload) {
-                return [];
-            }
-            
-            var days = payload.data.days,
-                graphData = [],
-                sortedDates = sortDates(payload.data.days, false),
-                today = new Date(),
-                // Earliest date to retain
-                cutoffDate = new Date(today - MAX_DAYS_AVG * ONE_DAY);
-            
-            for(var day in sortedDates) {
-                var currentDay = sortedDates[day],
-                    // For our comparison in the below 'if' statement,
-                    // we need currentDay as a Date object.
-                    currentDayAsDate = new Date(currentDay);
-
-                // We only want to display startup times for at most the last MAX_DAYS_AVG (90) days.
-                if(currentDayAsDate >= cutoffDate && sortedDates.hasOwnProperty(day)) {
-                    var sessionsInfo = days[currentDay]['org.mozilla.appSessions.previous'], 
-                        crashesInfo = days[currentDay]['org.mozilla.crashes.crashes'],
-                        versionsInfo = days[currentDay]['org.mozilla.appInfo.versions'],
-                        entry = { 
-                            "date" : currentDayAsDate, 
-                            "sessionCount" : 0,
-                            "medTime" : null,
-                            "crashCount" : 0,
-                            "updates" : {}
-                        };
-                    
-                    // Record median startup time and number of sessions, if any. 
-                    if(typeof sessionsInfo !== 'undefined' && typeof sessionsInfo.firstPaint !== 'undefined') {
-                        // Remove nonpositive times. 
-                        var paintTimes = sessionsInfo.firstPaint.filter(function(elt, ind, arr) { 
-                            return elt > 0 ? true : false;
-                        });
-                        entry.sessionCount = paintTimes.length;
-                        
-                        // Compute median and convert to seconds. 
-                        if(paintTimes.length > 1) {
-                            entry.medTime = computeMedian(paintTimes) / 1000;
-                        } else {
-                            if(paintTimes.length == 1) {
-                                entry.medTime = paintTimes[0] / 1000;
-                            }
-                            // If paintTimes.length == 0, no sessions to record. 
-                            // Do nothing (medTime remains null).
-                        }
-                    }
-                    
-                    // Accumulate crash counts, if any. 
-                    if(typeof crashesInfo !== 'undefined') {
-                        if(typeof crashesInfo.pending !== 'undefined') {
-                            entry.crashCount += crashesInfo.pending;
-                        }
-                        if(typeof crashesInfo.submitted !== 'undefined') {
-                            entry.crashCount += crashesInfo.submitted;
-                        }
-                    }
-                    
-                    // If any updates were recorded, retain the latest one. 
-                    if(typeof versionsInfo !== 'undefined') {
-                        if(typeof versionsInfo.appBuildID !== 'undefined') {
-                            entry.updates.build = d3.max(versionsInfo.appBuildID);
-                        }
-                        if(typeof versionsInfo.appVersion !== 'undefined') {
-                            entry.updates.version = d3.max(versionsInfo.appVersion);
-                        }
-                    }
-                    
-                    graphData.push(entry);
-                }
-            }
-
-            return graphData;
-        },
-
-        // Collects data to be plotted on the All plot. 
-        getAllGraphData = function() {
-            return [];
         };
+        
+    // Collect data to be plotted. 
+    // Specify the maximum number of days to include, 
+    // and a function to generate a new entry and record the startup data for a given day. 
+    function collectData(maxNumDays, newPopulatedEntry) {
+        if(!payload) {
+            return [];
+        }
+        
+        var days = payload.data.days,
+            graphData = [],
+            sortedDates = sortDates(payload.data.days, false),
+            today = new Date(),
+            // Earliest date to retain
+            cutoffDate = new Date(today - maxNumDays * ONE_DAY);
+        
+        for(var day in sortedDates) {
+            var currentDay = sortedDates[day],
+                // For our comparison in the below 'if' statement,
+                // we need currentDay as a Date object.
+                currentDayAsDate = new Date(currentDay);
+
+            // We only want to display startup times for at most the last MAX_DAYS_AVG (90) days.
+            if(currentDayAsDate >= cutoffDate && sortedDates.hasOwnProperty(day)) {
+                var sessionsInfo = days[currentDay]['org.mozilla.appSessions.previous'], 
+                    crashesInfo = days[currentDay]['org.mozilla.crashes.crashes'],
+                    versionsInfo = days[currentDay]['org.mozilla.appInfo.versions'],
+                    entry = newPopulatedEntry(sessionsInfo, currentDayAsDate);
+                   
+                // Accumulate crash counts, if any. 
+                if(typeof crashesInfo !== 'undefined') {
+                    if(typeof crashesInfo.pending !== 'undefined') {
+                        entry.crashCount += crashesInfo.pending;
+                    }
+                    if(typeof crashesInfo.submitted !== 'undefined') {
+                        entry.crashCount += crashesInfo.submitted;
+                    }
+                }
+                
+                // If any updates were recorded, retain the latest one. 
+                if(typeof versionsInfo !== 'undefined') {
+                    if(typeof versionsInfo.appBuildID !== 'undefined') {
+                        entry.updates.build = d3.max(versionsInfo.appBuildID);
+                    }
+                    if(typeof versionsInfo.appVersion !== 'undefined') {
+                        entry.updates.version = d3.max(versionsInfo.appVersion);
+                    }
+                }
+                
+                graphData.push(entry);
+            }
+        }
+
+        return graphData;
+    }
     
     return function(median) {
         if(median) {
-            return getAverageGraphData();
+            return collectData(MAX_DAYS_AVG, newPopulatedAvgEntry);
         } else { 
-            return getAllGraphData();
+            return collectData(MAX_DAYS_ALL, newPopulatedAllEntry);
         }
     };
     
