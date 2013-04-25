@@ -529,8 +529,11 @@ figcaption {
 .axis text {
     font-size: 10px;
 }
-.x.axis path {
+.date.axis path, .month.axis path {
 	display: none;
+}
+.month.axis line {
+    display: none;
 }
 .y.axis path {
     fill: none;
@@ -566,7 +569,7 @@ figcaption {
 .startup-point {
 	fill: #458b74; 
 }
-.startup {
+.plot-background {
 	fill: #e5e5e5; 
 	/* stroke: none */
 }
