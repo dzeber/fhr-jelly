@@ -119,7 +119,7 @@ var getGraphData = (function() {
                 // Record all positive times. 
                 sessionInfo.firstPaint.forEach(function(d, i, arr) {
                     if(d > 0) {
-                        entry.times.push(d);
+                        entry.times.push(d / 1000);
                     }
                 });
             }
