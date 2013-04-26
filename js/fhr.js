@@ -408,23 +408,6 @@ $(function() {
         
         }; 
       
-        // ****************************
-        // Diagnostic. 
-        var inspectData = function(dataArray) {
-            for(var i=0; i < dataArray.length; i++) { 
-                var str = "";
-                for(var k in dataArray[i]) {
-                    str += k + ": " + dataArray[i][k] + ",  ";
-                }
-                console.log(str);
-                // str = "";
-                // for(var k in dataArray[i].updates) {
-                    // str += k + ": " + dataArray[i].updates[k] + ",  ";
-                // }
-                // console.log(str);
-            }
-        };
-        // ****************************
        
         // Load the relevant data and display the Average plot. 
         // Data and computed values are not cached - data should refresh on each load. 
@@ -501,7 +484,8 @@ $(function() {
                 // Allocate space from 0 to maximum value in dataset. 
                 // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
                 .domain([ 0, 
-                    (startupData.length == 0) ? Y_MIN_HEIGHT : 
+                    (startupData.length == 0) ? 
+                        Y_MIN_HEIGHT : 
                         Math.max(Y_MIN_HEIGHT, d3.max(startupData, function(d) { 
                             return d.medTime; 
                         }))
@@ -546,7 +530,8 @@ $(function() {
             var earliest = (graphData.length == 0) ? 
                 d3.time.day(d3.time.day.offset(new Date(), -X_MIN_DAYS)) : 
                 new Date(Math.min(d3.time.day(d3.time.day.offset(new Date(), -X_MIN_DAYS)), 
-                d3.min(graphData, function(d) { return d.date; })));
+                    d3.min(graphData, function(d) { return d.date; })));
+            
             x = d3.time.scale()
                 // Allocate space from earliest date in the payload until today.
                 .domain([earliest, d3.time.day(new Date())])
@@ -636,7 +621,7 @@ $(function() {
         // Data and computed values are not cached - data should refresh on each load. 
         function drawAllPlot() {
             // Minimum height of y axis: 5 seconds 
-   /*         var Y_MIN_HEIGHT = 5, 
+            var Y_MIN_HEIGHT = 5, 
                 // Desired number of ticks on the y axis 
                 Y_NUM_TICKS = 5,
                 // Desired number of ticks on the y axis for outliers
@@ -658,21 +643,20 @@ $(function() {
             // Initialize a new plot container. 
             var svg = newPlot();
             
-        // /** Not in v1: 
-        
-            // Adjust space to accomodate crash indicator. 
-            mainPlotHeight -= crashHeight;
-            
-        // */    
-  /*      
             // Load data. 
             var graphData = getGraphData(false);
             
-            // inspectData(graphData);
-           
             // Dates are interpreted as midnight GMT. Change to midnight local time for display purposes. 
             graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
             
+        // /** Not in v1: 
+        
+            if(graphData.length > 0 && graphData.some(function(d) { return d.crashCount > 0; })) {
+                // Adjust space to accomodate crash indicator, if necessary. 
+                mainPlotHeight -= crashHeight;
+            }
+            
+        // */  
             
             // Extract startup time data. 
             var startupData = [];
@@ -688,13 +672,9 @@ $(function() {
                 }
             });
             
-            inspectData(startupData);
-            
             // Separate outliers, if any.  
             var outlierIndices = detectOutliers(startupData, "value"), 
                 outlierData = [];
-            
-            console.log(outlierIndices);
             
             if(outlierIndices.length > 0) { 
                 outlierIndices.forEach(function(d) { 
@@ -707,8 +687,6 @@ $(function() {
                 mainPlotHeight -= mainPlotOffset;
             }
             
-            inspectData(outlierData);
-               
             // Create y axis scales and axes. 
             
             var yAxis, yAxisOut;
@@ -717,9 +695,11 @@ $(function() {
                 // Allocate space from 0 to maximum value in dataset. 
                 // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
                 .domain([ 0, 
-                    Math.max(Y_MIN_HEIGHT, d3.max(startupData, function(d) { 
-                        return d.value; 
-                    }))
+                    (startupData.length == 0) ? 
+                        Y_MIN_HEIGHT : 
+                        Math.max(Y_MIN_HEIGHT, d3.max(startupData, function(d) { 
+                            return d.value; 
+                        }))
                 ])
                 .range([mainPlotHeight, mainPlotTopPadding]); 
             // Update scale to incorporate extra space at the top. 
@@ -758,9 +738,11 @@ $(function() {
             
             // Set up scale for dates on x-axis. 
             // If earliest date is less than two weeks ago, set to two weeks ago.
-            var earliest = new Date(Math.min(d3.time.day(d3.time.day.offset(new Date(), -X_MIN_DAYS)), 
-                d3.min(graphData, function(d) { return d.date; })
-            ));
+            var earliest = (graphData.length == 0) ? 
+                d3.time.day(d3.time.day.offset(new Date(), -X_MIN_DAYS)) : 
+                new Date(Math.min(d3.time.day(d3.time.day.offset(new Date(), -X_MIN_DAYS)), 
+                    d3.min(graphData, function(d) { return d.date; })));
+            
             x = d3.time.scale()
                 // Allocate space from earliest date in the payload until today.
                 .domain([earliest, d3.time.day(new Date())])
@@ -784,23 +766,35 @@ $(function() {
                 .call(xAxis.ticks(d3.time.months).tickFormat(d3.time.format("%b"))
                     .tickPadding(MONTH_TICK_PADDING));
             
-            // Add indicators for version updates. 
-            drawVersionUpdates(graphData.filter(function(d) { 
-                    return typeof d.updates !== "undefined" && typeof d.updates.version !== "undefined"; 
-                }), plot.main, plot.outlier);
             
+            if(graphData.length > 0) {
+                // Add indicators for version updates. 
+                var updateData = graphData.filter(function(d) { 
+                        return typeof d.updates !== "undefined" && typeof d.updates.version !== "undefined"; 
+                    });
+                if(updateData.length > 0) { 
+                    drawVersionUpdates(updateData, plot.main, plot.outlier);
+                }
+                
+                
+            // /** Not in v1
             
-        // /** Not in v1
-        
-            // Add indicators for build updates. 
-            drawBuildUpdates(graphData.filter(function(d) {
-                    return typeof d.updates !== "undefined" && typeof d.updates.build !== "undefined" && 
-                        typeof d.updates.version === "undefined"; 
-                }), plot.main);
+                // Add indicators for build updates. 
+                // Don't include dates with major version updates. 
+                updateData = graphData.filter(function(d) {
+                        return typeof d.updates !== "undefined" && 
+                            typeof d.updates.build !== "undefined" && 
+                            typeof d.updates.version === "undefined"; 
+                    });
+                if(updateData.length > 0) { 
+                    drawBuildUpdates(updateData, plot.main);
+                }
+                
+            // */
             
-        // */   
- /*           
-          
+            }
+            
+
             // Add points. 
             
             // Scale the point radius according to the horizontal space allocated per day. 
@@ -808,22 +802,28 @@ $(function() {
                          
             if(outlierData.length > 0) {
                 plot.outlier.selectAll("circle").data(outlierData).enter().append("circle")
-                    .attr("class", "startup-point").attr("r", pointRadius)
+                    .attr("class", "startup-point all").attr("r", pointRadius)
                     .attr("cx", function(d) { return x(d.date); })
-                    .attr("cy", function(d) { return yOut(d.medTime); });
+                    .attr("cy", function(d) { return yOut(d.value); });
             }
             
-            plot.main.selectAll("circle").data(startupData).enter().append("circle")
-                .attr("class", "startup-point").attr("r", pointRadius)
-                .attr("cx", function(d) { return x(d.date); })
-                .attr("cy", function(d) { return y(d.medTime); });
+            if(startupData.length > 0) {
+                plot.main.selectAll("circle").data(startupData).enter().append("circle")
+                    .attr("class", "startup-point all").attr("r", pointRadius)
+                    .attr("cx", function(d) { return x(d.date); })
+                    .attr("cy", function(d) { return y(d.value); });
+            }
             
             
         // /** Not in v1. 
         
-            // Add crash indicators.         
-            
-            drawCrashes(graphData.filter(function(d) { return d.crashCount > 0; }), plot.container);
+            // Add crash indicators, if any.         
+            if(graphData.length > 0) {
+                var crashData = graphData.filter(function(d) { return d.crashCount > 0; });
+                if(crashData.length > 0) {
+                    drawCrashes(crashData, plot.container); 
+                }
+            }
             
         // */
                
