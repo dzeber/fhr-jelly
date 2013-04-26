@@ -88,49 +88,109 @@ $(function() {
     // Generate the plots. 
     var FHRPlot = (function() {
     
-        var graphContainer = d3.select(".graph");
         
-        // Default amount of vertical space for the crash indicators, if desired. 
-        var CRASH_HEIGHT_DEFAULT = 20;
-        // Minimum height of y axis: 5 seconds 
-            var Y_MIN_HEIGHT = 5, 
-                // Desired number of ticks on the y axis 
-                Y_NUM_TICKS = 5,
-                // Desired number of ticks on the y axis for outliers
-                Y_NUM_TICKS_OUT = 2,
-                // Minimum number of dates on the x axis = 2 weeks 
-                X_MIN_DAYS = 14, 
-                // Padding to use to offset month labels
-                MONTH_TICK_PADDING = 15,
-                // Minimum point radius 
-                MIN_POINT_RAD = 2.5,  
-                // Maximum point radius 
-                MAX_POINT_RAD = 5, 
-                // Proportion of space allocated to a single day that the point radius should take
-                POINT_DAY_PROP = 0.5, 
-                // Proportion of plot height that should be dedicated to outliers, if any. 
-                OUTLIER_PLOT_PROP = 0.25;
-        
-        // Sizing parameters: 
-        
-        // Dimensions of the outer svg container
-        var containerWidth = parseInt(graphContainer.style("width"), 10),
-            containerHeight = parseInt(graphContainer.style("height"), 10),
+        // Plotting parameters: 
+        var plotOptions = {
+            // Startup plot aesthetics: 
+            
+            // Minimum height of y axis: 5 seconds 
+            Y_MIN_HEIGHT: 5, 
+            // Desired number of ticks on the y axis 
+            Y_NUM_TICKS: 5,
+            // Desired number of ticks on the y axis for outliers
+            Y_NUM_TICKS_OUT: 2,
+            // Minimum number of dates on the x axis: 2 weeks 
+            X_MIN_DAYS: 14, 
+            // Padding to use to offset month labels
+            MONTH_TICK_PADDING: 15,
+            // Minimum point radius 
+            MIN_POINT_RAD: 2.5,  
+            // Maximum point radius 
+            MAX_POINT_RAD: 5, 
+            // Proportion of space allocated to a single day that the point radius should take
+            POINT_DAY_PROP: 0.5, 
+            // Proportion of plot height that should be dedicated to outliers, if any. 
+            OUTLIER_PLOT_PROP: 0.25, 
+            
+            // Plot sizing: 
+            
+            // Vertical space to allocate for crash indicator
+            CRASH_HEIGHT: 0, 
             // Padding to add at top of entire plot - primarily to stop top axis label getting cut off. 
-            topPadding = 5,
+            TOP_PADDING: 5,
             // Vertical space for the x axis (ticks and labels)
-            xAxisHeight = 35, 
+            X_AXIS_HEIGHT: 32, 
             // Vertical space to add between main plot and outlier plot, if any. 
-            outlierGap = 15, 
+            OUTLIER_GAP: 15, 
             // Vertical amount by which the top of the plot (and the y axis) should exceed the highest datapoint.
-            mainPlotTopPadding = 20, 
+            MAIN_PLOT_TOP_PADDING: 20, 
             // Vertical amount by which the top and bottom of the outlier plot (and the y axis) 
             // should exceed the highest and lowest datapoints respectively.
-            outlierPlotPadding = 15, 
+            OUTLIER_PLOT_PADDING: 15, 
             // Padding between the left and right edges of the plot and the first and last days
-            leftRightPadding = 20; 
-              
-              
+            LEFT_RIGHT_PADDING: 20, 
+            
+            // Version updates: 
+            
+            // Horizontal offset of version labels from date. 
+            LABEL_H_OFFSET: 5, 
+            // Vertical offset of version labels from the top. 
+            LABEL_V_OFFSET: 12, 
+            
+            // Build updates: 
+            
+            // Amount by which to raise the build update tick above the x axis. 
+            UPDATE_TICK_OFFSET: 5, 
+            // Length of the build update tick. 
+            UPDATE_TICK_LENGTH: 10, 
+            
+            // Crash indicators: 
+                
+            // Proportion of space allocated to a single day that the crash point radius should take
+            CRASH_DAY_PROP: 0.9, 
+            // Radius parameter for rounded corners for crash indicators
+            CRASH_RX: 4, 
+            // Max number of crashes to be registered on the colour scale 
+            // Higher numbers of crashes will be capped at this 
+            CRASH_NUM_CAP: 10, 
+            // Range to specify for the crash colour scale
+            CRASH_COL_RANGE: ["#ffc966", "#4c0000"], 
+            // Height of crash indicator arrow
+            CRASH_ARROW_HEIGHT: 5,
+            // Width of crash indicator arrow as a proportion of crash indicator width. 
+            CRASH_ARROW_WIDTH_PROP: 0.5,
+            
+            // Outlier detection: 
+            
+            // The number of values flagged as outliers should not exceed this proportion of the data. 
+            MAX_PROP_OUTLIERS: 0.1,
+            // A value is flagged as an outlier if its distance from the next largest value 
+            // is larger than this proportion of the maximum value. 
+            MAX_GAP_PROP: 0.7
+            // MAX_GAP_PROP: 0.51
+                
+        }, 
+        
+        optionGetter = function(options) {
+            if(typeof options === "undefined") {
+                return function(key) { 
+                    return plotOptions[key];
+                };
+            }
+            return function(key) { 
+                return options[key] || plotOptions[key];
+            };
+        };
+        
+        
+        // Outer container. 
+        var graphContainer = d3.select(".graph");
+        
+        // Store dimensions of the outer svg container
+        plotOptions["CONTAINER_WIDTH"] = parseInt(graphContainer.style("width"), 10);
+        plotOptions["CONTAINER_HEIGHT"] = parseInt(graphContainer.style("height"), 10);
+        
+               
         // Plot sizing variables to be computed: 
             
         // The height of the main startup times plot area, excluding axes and the outlier plot, if any. 
@@ -143,9 +203,7 @@ $(function() {
             // Width of the plot area. 
             plotWidth, 
             // The horizontal space allocated to one day. 
-            dayWidth, 
-             // Vertical space to allocate for crash indicator
-            crashHeight;
+            dayWidth;
             
             
         // Plot scales. 
@@ -156,11 +214,8 @@ $(function() {
             
         // Add indicators for version updates. 
         // Draw vertical dotted lines and label with the version numbers. 
-        var drawVersionUpdates = function(updateData, mainPlot, outlierPlot) {
-            // Horizontal offset of version labels from date. 
-            var LABEL_H_OFFSET = 5, 
-                // Vertical offset of version labels from the top. 
-                LABEL_V_OFFSET = 12;
+        var drawVersionUpdates = function(updateData, mainPlot, outlierPlot, options) {
+            options = optionGetter(options);
             
             // Draw version lines as another axis. 
             var versionUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
@@ -181,79 +236,64 @@ $(function() {
             var plotToLabel = (typeof outlierPlot !== "undefined") ? outlierPlot : mainPlot;
             plotToLabel.selectAll(".version-label text")
                 .data(updateData).enter().append("text").attr("class", "version-label")
-                .attr("x", -LABEL_H_OFFSET).attr("y", function(d) { return x(d.date) + LABEL_V_OFFSET; })
+                .attr("x", -options("LABEL_H_OFFSET")).attr("y", function(d) { return x(d.date) + options("LABEL_V_OFFSET"); })
                 .attr("text-anchor", "end").attr("transform", "rotate(-90)")
                 .text(function(d) { return d.updates.version; });
         }, 
         
         // Add indicators for build updates as extra tick marks on x axis. 
-        drawBuildUpdates = function(updateData, mainPlot) {
-            // Amount by which to raise the build update tick above the x axis. 
-            var UPDATE_TICK_OFFSET = 5, 
-                // Length of the build update tick. 
-                UPDATE_TICK_LENGTH = 10;
-                
+        drawBuildUpdates = function(updateData, mainPlot, options) {
+            options = optionGetter(options);
+            
             var buildUpdateAxis = d3.svg.axis().scale(x).orient("bottom")
                 .tickValues(updateData.map(function(d) { return d.date; }))
-                .tickSize(UPDATE_TICK_LENGTH);
+                .tickSize(options("UPDATE_TICK_LENGTH"));
                 
             mainPlot.append("g").attr("class", "build-update")
-                .attr("transform", "translate(0," + (mainPlotHeight - UPDATE_TICK_OFFSET) + ")")
+                .attr("transform", "translate(0," + (mainPlotHeight - options("UPDATE_TICK_OFFSET")) + ")")
                 .call(buildUpdateAxis);
         }, 
         
         // Add crash indicators.         
         // Draw as coloured boxes with arrows underneath x axis. 
         // Intensity of colour indicates number of crashes.             
-        drawCrashes = function(crashData, container) {
-            // Proportion of space allocated to a single day that the crash point radius should take
-            var CRASH_DAY_PROP = 0.9, 
-                // Radius parameter for rounded corners for crash indicators
-                CRASH_RX = 4, 
-                // Max number of crashes to be registered on the colour scale 
-                // Higher numbers of crashes will be capped at this 
-                CRASH_NUM_CAP = 10, 
-                // Range to specify for the crash colour scale
-                CRASH_COL_RANGE = ["#ffc966", "#4c0000"], 
-                // Height of crash indicator arrow
-                CRASH_ARROW_HEIGHT = 5,
-                // Width of crash indicator arrow as a proportion of crash indicator width. 
-                CRASH_ARROW_WIDTH_PROP = 0.5;
-                
+        drawCrashes = function(crashData, container, options) {
+            options = optionGetter(options);
+            
             // Group for crash indicators below x axis. 
             var crashes = container.append("g")
-                .attr("transform", "translate(0," + (mainPlotOffset + mainPlotHeight + xAxisHeight) + ")");
+                .attr("transform", "translate(0," + (mainPlotOffset + mainPlotHeight + options("X_AXIS_HEIGHT")) + ")");
              
-            var boxHeight = crashHeight - CRASH_ARROW_HEIGHT,
+            var boxHeight = options("CRASH_HEIGHT") - options("CRASH_ARROW_HEIGHT"),
                 // Scale the indicator width according to the horizontal space allocated per day. 
                 // Restrict the indicator to be no wider than it is tall. 
-                boxWidth = Math.min(dayWidth * CRASH_DAY_PROP, boxHeight), 
+                boxWidth = Math.min(dayWidth * options("CRASH_DAY_PROP"), boxHeight), 
                 // Width of the base of the arrow. 
-                arrowWidth = boxWidth * CRASH_ARROW_WIDTH_PROP;
+                arrowWidth = boxWidth * options("CRASH_ARROW_WIDTH_PROP");
                     
             // Set up colour scale for crashes. 
             var crashScale = d3.scale.linear()
                 // Cap maximum number of crashes to register on the scale. 
-                .domain([1, CRASH_NUM_CAP]).range(CRASH_COL_RANGE);
+                .domain([1, options("CRASH_NUM_CAP")]).range(options("CRASH_COL_RANGE"));
             
             // Add crash indicators boxes, leaving space for arrows on top. 
             crashes.selectAll("rect").data(crashData).enter().append("rect")
                 .attr("x", function(d) { return x(d.date) - boxWidth/2; })
-                .attr("y", CRASH_ARROW_HEIGHT).attr("width", boxWidth)
-                .attr("height", boxHeight).attr("rx", CRASH_RX)
+                .attr("y", options("CRASH_ARROW_HEIGHT")).attr("width", boxWidth)
+                .attr("height", boxHeight).attr("rx", options("CRASH_RX"))
                 .style("fill", function(d) { 
-                    return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
+                    return crashScale(d.crashCount > options("CRASH_NUM_CAP") ? options("CRASH_NUM_CAP") : d.crashCount); 
                 });
             
             // Add arrows pointing to x-axis. 
             crashes.selectAll("polygon").data(crashData).enter().append("polygon")
                 .attr("points", function(d) { 
-                    return (x(d.date) - arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
-                        (x(d.date) + arrowWidth / 2) + "," + CRASH_ARROW_HEIGHT + " " + 
+                    return (x(d.date) - arrowWidth / 2) + "," + options("CRASH_ARROW_HEIGHT") + " " + 
+                        (x(d.date) + arrowWidth / 2) + "," + options("CRASH_ARROW_HEIGHT") + " " + 
                         x(d.date) + ",0";
                 })
                 .style("fill", function(d) { 
-                    return crashScale(d.crashCount > CRASH_NUM_CAP ? CRASH_NUM_CAP : d.crashCount); 
+                    return crashScale(d.crashCount > options("CRASH_NUM_CAP") ? options("CRASH_NUM_CAP") : d.crashCount); 
                 });
         }, 
         
@@ -262,16 +302,11 @@ $(function() {
         // along with the key used to identify the values. 
         // Outputs an array of indices of the elements in the input data array 
         // that should be considered outliers, if any. 
-        detectOutliers = function(data, valueKey) { 
+        detectOutliers = function(data, valueKey, options) {
+            options = optionGetter(options);
+            
             if(data.length == 0)
                 return [];
-        
-            // The number of values flagged as outliers should not exceed this proportion of the data. 
-            var MAX_PROP_OUTLIERS = 0.1,
-                // A value is flagged as an outlier if its distance from the next largest value 
-                // is larger than this proportion of the maximum value. 
-                MAX_GAP_PROP = 0.7;
-                // MAX_GAP_PROP = 0.51;
                 
             // Create a reduced copy of the dataset to work with. 
             var vals = data.map(function(d, i, arr) { 
@@ -305,7 +340,7 @@ $(function() {
                 upper = n - 1,
                 // If the proportion of points to remain on the main plot is less than 1 - MAX_PROP_OUTLIERS, 
                 // do not consider any further points for flagging. 
-                stoppingPoint = n * (1 - MAX_PROP_OUTLIERS),
+                stoppingPoint = n * (1 - options("MAX_PROP_OUTLIERS")),
                 maxGap, 
                 // The index in the sorted data of the upper endpoint of the largest gap. 
                 indexOfMax;
@@ -322,7 +357,7 @@ $(function() {
                 }); 
                 indexOfMax = gaps.lastIndexOf(maxGap, upper - 1) + 1;
                 // If this gap is large enough, and not too much data will be flagged: 
-                if(maxGap > vals[upper].value * MAX_GAP_PROP && indexOfMax > stoppingPoint) {
+                if(maxGap > vals[upper].value * options("MAX_GAP_PROP") && indexOfMax > stoppingPoint) {
                     // Flag all points above the upper endpoint of the gap (inclusive) as outliers. 
                     cutPoint = indexOfMax;
                 } else {
@@ -354,27 +389,30 @@ $(function() {
         setUpPlotArea = function(startupData, dataKey, dateRange, outlierData, options) {
             startupData = startupData || [];
             outlierData = outlierData || [];
-            options = options || {}
+            options = optionGetter(options);
             
             graphContainer.select("#svgplot").remove();
             
             // Set sizing. 
-            mainPlotHeight = containerHeight - topPadding - xAxisHeight - crashHeight, 
+            mainPlotHeight = options("CONTAINER_HEIGHT") 
+                - options("TOP_PADDING") 
+                - options("X_AXIS_HEIGHT") 
+                - options("CRASH_HEIGHT"), 
             outlierPlotHeight = 0, 
             mainPlotOffset = 0, 
-            plotWidth = containerWidth;
+            plotWidth = options("CONTAINER_WIDTH");
             
             // Set y axis label position relative to the height of the plot. 
             d3.select("#yaxis-label").style("top", Math.round(mainPlotHeight / 2) + "px");
            
             var svg = graphContainer.append("svg:svg").attr("id", "svgplot")
-                .attr("width", containerWidth + "px")
-                .attr("height", containerHeight + "px");
+                .attr("width", options("CONTAINER_WIDTH") + "px")
+                .attr("height", options("CONTAINER_HEIGHT") + "px");
                 
             // Adjust sizing variables to accomodate outlier plot, in necessary.
             if(outlierData.length > 0) {
-                outlierPlotHeight = mainPlotHeight * OUTLIER_PLOT_PROP;
-                mainPlotOffset = outlierPlotHeight + outlierGap;
+                outlierPlotHeight = mainPlotHeight * options("OUTLIER_PLOT_PROP");
+                mainPlotOffset = outlierPlotHeight + options("OUTLIER_GAP");
                 mainPlotHeight -= mainPlotOffset;
             }
             
@@ -386,16 +424,16 @@ $(function() {
                 // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
                 .domain([ 0, 
                     (startupData.length == 0) ? 
-                        Y_MIN_HEIGHT : 
-                        Math.max(Y_MIN_HEIGHT, d3.max(startupData, function(d) { 
+                        options("Y_MIN_HEIGHT") : 
+                        Math.max(options("Y_MIN_HEIGHT"), d3.max(startupData, function(d) { 
                             return d[dataKey]; 
                         }))
                 ])
-                .range([mainPlotHeight, mainPlotTopPadding]); 
+                .range([mainPlotHeight, options("MAIN_PLOT_TOP_PADDING")]); 
             // Update scale to incorporate extra space at the top. 
             y.domain([0, y.invert(0)]).range([mainPlotHeight, 0]);
             
-            yAxis = d3.svg.axis().scale(y).orient("left").ticks(Y_NUM_TICKS);
+            yAxis = d3.svg.axis().scale(y).orient("left").ticks(options("Y_NUM_TICKS"));
             
             if(outlierData.length > 0) {
                 yOut = d3.scale.linear()
@@ -404,7 +442,7 @@ $(function() {
                     .domain(outlierData.length > 1 ? d3.extent(outlierData, function(d) {
                         return d[dataKey]; 
                     }) : [ Math.floor(outlierData[0][dataKey]), Math.ceil(outlierData[0][dataKey]) ])
-                    .range([ outlierPlotHeight - outlierPlotPadding, outlierPlotPadding ]); 
+                    .range([ outlierPlotHeight - options("OUTLIER_PLOT_PADDING"), options("OUTLIER_PLOT_PADDING") ]); 
                 // Update scale to incorporate extra space at the top. 
                 yOut.domain([ yOut.invert(outlierPlotHeight), yOut.invert(0) ])
                     .range([outlierPlotHeight, 0]);
@@ -414,7 +452,7 @@ $(function() {
                     yAxisOut.tickValues([ Math.floor(outlierData[0][dataKey]), Math.ceil(outlierData[0][dataKey]) ])
                         .tickFormat(d3.format(".0f"));
                 } else { 
-                    yAxisOut.ticks(Y_NUM_TICKS_OUT);
+                    yAxisOut.ticks(options("Y_NUM_TICKS_OUT"));
                 }
             }
             
@@ -439,7 +477,7 @@ $(function() {
             yAxisPadding = Math.max(yAxisPadding, axisElement[0][0].getBBox().width);
             
             // Padding for y axis has now been determined. Make corresponding adjustments. 
-            plotContainer.attr("transform", "translate(" + yAxisPadding + ", " + topPadding + ")");
+            plotContainer.attr("transform", "translate(" + yAxisPadding + ", " + options("TOP_PADDING") + ")");
             plotWidth -= yAxisPadding;
             
             result["container"] = plotContainer;
@@ -482,7 +520,7 @@ $(function() {
             // Create x (date) scale and axis. 
             
             x = d3.time.scale().domain([ dateRange[0], d3.time.day(dateRange[1])])
-                .range([leftRightPadding, plotWidth - leftRightPadding]);
+                .range([options("LEFT_RIGHT_PADDING"), plotWidth - options("LEFT_RIGHT_PADDING")]);
             
             // Compute the horizontal space per day. 
             dayWidth = x(d3.time.day.offset(dateRange[0], 1)) - x(dateRange[0]);
@@ -502,7 +540,7 @@ $(function() {
             mainPlotArea.append("g").attr("class", "month axis")
                 .attr("transform", "translate(0," + mainPlotHeight + ")")
                 .call(xAxis.tickValues(monthTicks).tickFormat(d3.time.format("%b"))
-                    .tickPadding(MONTH_TICK_PADDING));
+                    .tickPadding(options("MONTH_TICK_PADDING")));
             
             return result;    
         };
@@ -511,24 +549,14 @@ $(function() {
         // Load the relevant data and display the Average plot. 
         // Data and computed values are not cached - data should refresh on each load. 
         function drawAveragePlot() {
+            // Default amount of vertical space for the crash indicators, if desired. 
+            var CRASH_HEIGHT_DEFAULT = 20;
             
             // Load data. 
             var graphData = getGraphData(true);
             
             // Dates are interpreted as midnight GMT. Change to midnight local time for display purposes. 
             graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
-            
-         
-        /** Not in v1: 
-        
-            if(graphData.length > 0 && graphData.some(function(d) { return d.crashCount > 0; })) {
-                // Adjust space to accomodate crash indicator, if necessary. 
-                crashHeight = CRASH_HEIGHT_DEFAULT;
-            } else { 
-        */      crashHeight = 0;
-        /*  }
-        
-        */   
             
             // Extract startup time data. 
             // Remove dates with medTime undefined or null (means that there was no sessions startups for that day). 
@@ -551,16 +579,34 @@ $(function() {
             // If earliest date is less than two weeks ago, set to two weeks ago.
             var today = new Date(), 
                 earliest = (graphData.length == 0) ? 
-                    d3.time.day(d3.time.day.offset(today, -X_MIN_DAYS)) : 
-                    new Date(Math.min(d3.time.day(d3.time.day.offset(today, -X_MIN_DAYS)), 
-                        d3.min(graphData, function(d) { return d.date; })));
+                    d3.time.day(d3.time.day.offset(today, -plotOptions.X_MIN_DAYS)) : 
+                    new Date(Math.min(
+                        d3.time.day(d3.time.day.offset(today, -plotOptions.X_MIN_DAYS)), 
+                        d3.min(graphData, function(d) { return d.date; })
+                    ));
+                
+            
+            
+            
+        // /** Not in v1: 
+        
+            var options = {};
+        
+            if(graphData.length > 0 && graphData.some(function(d) { return d.crashCount > 0; })) {
+                // Adjust space to accomodate crash indicator, if necessary. 
+                options["CRASH_HEIGHT"] = CRASH_HEIGHT_DEFAULT;
+            } 
+        
+        // */   
                 
             // Initialize plot. 
             var plot = setUpPlotArea(
                     startupData, 
                     "medTime", 
                     [ earliest, d3.time.day(today) ], 
-                    outlierData
+                    outlierData 
+                    ,options
+                    /** ,options */
                 );
    
             
@@ -575,7 +621,7 @@ $(function() {
                 }
                 
                 
-            /** Not in v1
+            // /** Not in v1
             
                 // Add indicators for build updates. 
                 // Don't include dates with major version updates. 
@@ -588,14 +634,14 @@ $(function() {
                     drawBuildUpdates(updateData, plot.main);
                 }
                 
-            */
+            // */
             
             }
             
             // Add points. 
             
             // Scale the point radius according to the horizontal space allocated per day. 
-            var pointRadius = Math.min(Math.max(dayWidth * POINT_DAY_PROP, MIN_POINT_RAD), MAX_POINT_RAD); 
+            var pointRadius = Math.min(Math.max(dayWidth * plotOptions.POINT_DAY_PROP, plotOptions.MIN_POINT_RAD), plotOptions.MAX_POINT_RAD); 
                          
             if(outlierData.length > 0) {
                 plot.outlier.selectAll("circle").data(outlierData).enter().append("circle")
@@ -612,41 +658,32 @@ $(function() {
             }
             
                 
-        /** Not in v1. 
+        // /** Not in v1. 
         
             // Add crash indicators, if any.         
             if(graphData.length > 0) {
                 var crashData = graphData.filter(function(d) { return d.crashCount > 0; });
                 if(crashData.length > 0) {
-                    drawCrashes(crashData, plot.container); 
+                    drawCrashes(crashData, plot.container, options); 
                 }
             }
             
-        */
+        // */
                
         }
         
         // Load the relevant data and display the All plot. 
         // Data and computed values are not cached - data should refresh on each load. 
         function drawAllPlot() {
-           
+            // Default amount of vertical space for the crash indicators, if desired. 
+            var CRASH_HEIGHT_DEFAULT = 20;
+            
             // Load data. 
             var graphData = getGraphData(false);
             
             // Dates are interpreted as midnight GMT. Change to midnight local time for display purposes. 
             graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
-            
-       /** Not in v1: 
-        
-            if(graphData.length > 0 && graphData.some(function(d) { return d.crashCount > 0; })) {
-                // Adjust space to accomodate crash indicator, if necessary. 
-                crashHeight = CRASH_HEIGHT_DEFAULT;
-            } else { 
-        */      crashHeight = 0;
-        /*  }
-        
-        */   
-            
+                 
             // Extract startup time data. 
             var startupData = [];
             // Flatten data to an array of objects of the form { date, time }.
@@ -675,9 +712,22 @@ $(function() {
             // If earliest date is less than two weeks ago, set to two weeks ago.
             var today = new Date(), 
                 earliest = (graphData.length == 0) ? 
-                    d3.time.day(d3.time.day.offset(today, -X_MIN_DAYS)) : 
-                    new Date(Math.min(d3.time.day(d3.time.day.offset(today, -X_MIN_DAYS)), 
-                        d3.min(graphData, function(d) { return d.date; })));
+                    d3.time.day(d3.time.day.offset(today, -plotOptions.X_MIN_DAYS)) : 
+                    new Date(Math.min(
+                        d3.time.day(d3.time.day.offset(today, -plotOptions.X_MIN_DAYS)), 
+                        d3.min(graphData, function(d) { return d.date; })
+                    ));
+            
+        /** Not in v1: 
+        
+            var options = {};
+        
+            if(graphData.length > 0 && graphData.some(function(d) { return d.crashCount > 0; })) {
+                // Adjust space to accomodate crash indicator, if necessary. 
+                options["CRASH_HEIGHT"] = CRASH_HEIGHT_DEFAULT;
+            } 
+        
+        */   
                 
             // Initialize plot. 
             var plot = setUpPlotArea(
@@ -685,6 +735,7 @@ $(function() {
                     "value", 
                     [ earliest, d3.time.day(today) ], 
                     outlierData
+                    /* ,options */
                 );
    
    
@@ -720,7 +771,7 @@ $(function() {
             // Add points. 
             
             // Scale the point radius according to the horizontal space allocated per day. 
-            var pointRadius = Math.min(Math.max(dayWidth * POINT_DAY_PROP, MIN_POINT_RAD), MAX_POINT_RAD); 
+            var pointRadius = Math.min(Math.max(dayWidth * plotOptions.POINT_DAY_PROP, plotOptions.MIN_POINT_RAD), plotOptions.MAX_POINT_RAD); 
                          
             if(outlierData.length > 0) {
                 plot.outlier.selectAll("circle").data(outlierData).enter().append("circle")
