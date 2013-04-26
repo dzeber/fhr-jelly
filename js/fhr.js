@@ -588,7 +588,7 @@ $(function() {
             
             
             
-        // /** Not in v1: 
+        /** Not in v1: 
         
             var options = {};
         
@@ -597,7 +597,7 @@ $(function() {
                 options["CRASH_HEIGHT"] = CRASH_HEIGHT_DEFAULT;
             } 
         
-        // */   
+        */   
                 
             // Initialize plot. 
             var plot = setUpPlotArea(
@@ -605,7 +605,6 @@ $(function() {
                     "medTime", 
                     [ earliest, d3.time.day(today) ], 
                     outlierData 
-                    ,options
                     /** ,options */
                 );
    
@@ -621,7 +620,7 @@ $(function() {
                 }
                 
                 
-            // /** Not in v1
+            /** Not in v1
             
                 // Add indicators for build updates. 
                 // Don't include dates with major version updates. 
@@ -634,7 +633,7 @@ $(function() {
                     drawBuildUpdates(updateData, plot.main);
                 }
                 
-            // */
+            */
             
             }
             
@@ -658,7 +657,7 @@ $(function() {
             }
             
                 
-        // /** Not in v1. 
+        /** Not in v1. 
         
             // Add crash indicators, if any.         
             if(graphData.length > 0) {
@@ -668,7 +667,7 @@ $(function() {
                 }
             }
             
-        // */
+        */
                
         }
         
@@ -735,7 +734,7 @@ $(function() {
                     "value", 
                     [ earliest, d3.time.day(today) ], 
                     outlierData
-                    /* ,options */
+                    /** ,options */
                 );
    
    
@@ -794,7 +793,7 @@ $(function() {
             if(graphData.length > 0) {
                 var crashData = graphData.filter(function(d) { return d.crashCount > 0; });
                 if(crashData.length > 0) {
-                    drawCrashes(crashData, plot.container); 
+                    drawCrashes(crashData, plot.container, options); 
                 }
             }
             
