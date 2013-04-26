@@ -70,7 +70,8 @@ var getGraphData = (function() {
     // Maximum number of days to display on the Average plot. 
     var MAX_DAYS_AVG = 90, 
         // Maximum number of days to display on the All plot. 
-        MAX_DAYS_ALL = 14;
+        // MAX_DAYS_ALL = 14;
+        MAX_DAYS_ALL = MAX_DAYS_AVG;
     
     // Create a new entry and collect the current day's startup data for the Average plot. 
     // Record median firstPaint time and number of sessions, if any. 
