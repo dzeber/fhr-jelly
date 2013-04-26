@@ -90,6 +90,26 @@ $(function() {
     
         var graphContainer = d3.select(".graph");
         
+        // Default amount of vertical space for the crash indicators, if desired. 
+        var CRASH_HEIGHT_DEFAULT = 20;
+        // Minimum height of y axis: 5 seconds 
+            var Y_MIN_HEIGHT = 5, 
+                // Desired number of ticks on the y axis 
+                Y_NUM_TICKS = 5,
+                // Desired number of ticks on the y axis for outliers
+                Y_NUM_TICKS_OUT = 2,
+                // Minimum number of dates on the x axis = 2 weeks 
+                X_MIN_DAYS = 14, 
+                // Padding to use to offset month labels
+                MONTH_TICK_PADDING = 15,
+                // Minimum point radius 
+                MIN_POINT_RAD = 2.5,  
+                // Maximum point radius 
+                MAX_POINT_RAD = 5, 
+                // Proportion of space allocated to a single day that the point radius should take
+                POINT_DAY_PROP = 0.5, 
+                // Proportion of plot height that should be dedicated to outliers, if any. 
+                OUTLIER_PLOT_PROP = 0.25;
         
         // Sizing parameters: 
         
@@ -100,8 +120,6 @@ $(function() {
             topPadding = 5,
             // Vertical space for the x axis (ticks and labels)
             xAxisHeight = 35, 
-            // Vertical space to allocate for crash indicator
-            crashHeight = 20, 
             // Vertical space to add between main plot and outlier plot, if any. 
             outlierGap = 15, 
             // Vertical amount by which the top of the plot (and the y axis) should exceed the highest datapoint.
@@ -125,7 +143,9 @@ $(function() {
             // Width of the plot area. 
             plotWidth, 
             // The horizontal space allocated to one day. 
-            dayWidth;
+            dayWidth, 
+             // Vertical space to allocate for crash indicator
+            crashHeight;
             
             
         // Plot scales. 
@@ -134,96 +154,9 @@ $(function() {
         
         // Plotting functionality:
             
-        // Remove the old plot and create a fresh outer svg container. 
-        var newPlot = function() {
-            graphContainer.select("#svgplot").remove();
-            
-            // Reset sizing. 
-            mainPlotHeight = containerHeight - topPadding - xAxisHeight, 
-            outlierPlotHeight = 0, 
-            mainPlotOffset = 0, 
-            plotWidth = containerWidth;
-            
-            // Set y axis label position relative to the height of the plot. 
-            d3.select("#yaxis-label").style("top", Math.round(mainPlotHeight / 2) + "px");
-           
-            return graphContainer.append("svg:svg").attr("id", "svgplot")
-                .attr("width", containerWidth + "px")
-                .attr("height", containerHeight + "px");
-        }, 
-    
-        // Prepare the startup plot area. 
-        // Computes the necessary y axis padding, and adjusts the inner container accordingly. 
-        // Adds value axes, gridlines and background. 
-        // Requires the outer svg container, y axis function, and outlier y axis function if available. 
-        // Returns the d3 selections for the adjusted inner container, the main plot area, and the outlier plot area, if available.  
-        setUpPlotArea = function(container, yAxis, yAxisOutlier) {
-            
-            var innerContainer = container.append("g"), 
-                mainPlotArea, 
-                result = {}, 
-                axisElement; 
-                
-            var yAxisPadding = 0;
-            
-            // Add y axes to the plot and record the amount of horizontal space they occupy. 
-            // Compute padding according to actual space taken by y axis including ticks and labels. 
-            if(typeof yAxisOutlier !== "undefined") {
-                axisElement = innerContainer.append("g").attr("class", "y axis").call(yAxisOutlier);
-                yAxisPadding = Math.max(yAxisPadding, axisElement[0][0].getBBox().width);
-            }
-            
-            axisElement = innerContainer.append("g").attr("transform", "translate(0," + mainPlotOffset + ")")
-                .attr("class", "y axis").call(yAxis);
-            yAxisPadding = Math.max(yAxisPadding, axisElement[0][0].getBBox().width);
-            
-            // Padding for y axis has now been determined. Make corresponding adjustments. 
-            innerContainer.attr("transform", "translate(" + yAxisPadding + ", " + topPadding + ")");
-            plotWidth -= yAxisPadding;
-            
-            result["container"] = innerContainer;
-            
-            // Add group for main plot area. 
-            mainPlotArea = innerContainer.insert("g", ":first-child")
-                .attr("transform", "translate(" + 0 + ", " + mainPlotOffset + ")"); 
-                
-            // Add background colour.  
-            mainPlotArea.append("rect").attr("class", "plot-background")
-                .attr("width", plotWidth).attr("height", mainPlotHeight);
-            
-            // Add gridlines as a separate axis. 
-            mainPlotArea.append("g").attr("class", "gridlines")
-                .call(yAxis.tickSize(-plotWidth));
-                
-            result["main"] = mainPlotArea;
-                
-            // If have separate outlier plot, follow same steps to create subplot area. 
-            if(typeof yAxisOutlier !== "undefined") {
-                var outlierPlotArea = innerContainer.insert("g", ":first-child");
-                
-                // Add background and gridlines. 
-                outlierPlotArea.append("rect").attr("class", "plot-background")
-                    .attr("width", plotWidth).attr("height", outlierPlotHeight);
-                outlierPlotArea.append("g").attr("class", "gridlines")
-                    .call(yAxisOutlier.tickSize(-plotWidth));
-            
-                // Add dotted boundary separators. 
-                outlierPlotArea.append("line").attr("x1", 0).attr("y1", outlierPlotHeight)
-                    .attr("x2", plotWidth).attr("y2", outlierPlotHeight)
-                    .attr("class", "boundary");
-                mainPlotArea.append("line").attr("x1", 0).attr("y1", 0)
-                    .attr("x2", plotWidth).attr("y2", 0)
-                    .attr("class", "boundary");
-                    
-                result["outlier"] = outlierPlotArea;
-            }
-            
-            return result;
-        }, 
-                
         // Add indicators for version updates. 
         // Draw vertical dotted lines and label with the version numbers. 
-        drawVersionUpdates = function(updateData, mainPlot, outlierPlot) {
+        var drawVersionUpdates = function(updateData, mainPlot, outlierPlot) {
             // Horizontal offset of version labels from date. 
             var LABEL_H_OFFSET = 5, 
                 // Vertical offset of version labels from the top. 
@@ -406,35 +339,178 @@ $(function() {
             
             return outlierIndices;
         
-        }; 
+        }, 
+        
+        // Prepare the startup plot area. 
+        // Removes the old plot and create a fresh outer svg container. 
+        // Sets up x and y axes and scales. 
+        // Computes the necessary y axis padding, and adjusts the inner container accordingly. 
+        // Adds value axes, gridlines and background. 
+        // Requires the dataset of startup times to be plotted, the key to access the data values, 
+        // the range of dates to display on the x axis (array of length 2),
+        // and optionally the dataset of outlying startup times to be plotted separately, 
+        // and a set of options (as an object) overriding those in plotOptions. 
+        // Returns the d3 selections for the adjusted inner container, the main plot area, and the outlier plot area, if available.  
+        setUpPlotArea = function(startupData, dataKey, dateRange, outlierData, options) {
+            startupData = startupData || [];
+            outlierData = outlierData || [];
+            options = options || {}
+            
+            graphContainer.select("#svgplot").remove();
+            
+            // Set sizing. 
+            mainPlotHeight = containerHeight - topPadding - xAxisHeight - crashHeight, 
+            outlierPlotHeight = 0, 
+            mainPlotOffset = 0, 
+            plotWidth = containerWidth;
+            
+            // Set y axis label position relative to the height of the plot. 
+            d3.select("#yaxis-label").style("top", Math.round(mainPlotHeight / 2) + "px");
+           
+            var svg = graphContainer.append("svg:svg").attr("id", "svgplot")
+                .attr("width", containerWidth + "px")
+                .attr("height", containerHeight + "px");
+                
+            // Adjust sizing variables to accomodate outlier plot, in necessary.
+            if(outlierData.length > 0) {
+                outlierPlotHeight = mainPlotHeight * OUTLIER_PLOT_PROP;
+                mainPlotOffset = outlierPlotHeight + outlierGap;
+                mainPlotHeight -= mainPlotOffset;
+            }
+            
+            // Create y scales and axes. 
+            var yAxis, yAxisOut;
+            
+            y = d3.scale.linear()
+                // Allocate space from 0 to maximum value in dataset. 
+                // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
+                .domain([ 0, 
+                    (startupData.length == 0) ? 
+                        Y_MIN_HEIGHT : 
+                        Math.max(Y_MIN_HEIGHT, d3.max(startupData, function(d) { 
+                            return d[dataKey]; 
+                        }))
+                ])
+                .range([mainPlotHeight, mainPlotTopPadding]); 
+            // Update scale to incorporate extra space at the top. 
+            y.domain([0, y.invert(0)]).range([mainPlotHeight, 0]);
+            
+            yAxis = d3.svg.axis().scale(y).orient("left").ticks(Y_NUM_TICKS);
+            
+            if(outlierData.length > 0) {
+                yOut = d3.scale.linear()
+                    // Domain should incorporate outlier values. 
+                    // If only a single outlier, pad domain. 
+                    .domain(outlierData.length > 1 ? d3.extent(outlierData, function(d) {
+                        return d[dataKey]; 
+                    }) : [ Math.floor(outlierData[0][dataKey]), Math.ceil(outlierData[0][dataKey]) ])
+                    .range([ outlierPlotHeight - outlierPlotPadding, outlierPlotPadding ]); 
+                // Update scale to incorporate extra space at the top. 
+                yOut.domain([ yOut.invert(outlierPlotHeight), yOut.invert(0) ])
+                    .range([outlierPlotHeight, 0]);
+                    
+                yAxisOut = d3.svg.axis().scale(yOut).orient("left");
+                if(outlierData.length == 1) { 
+                    yAxisOut.tickValues([ Math.floor(outlierData[0][dataKey]), Math.ceil(outlierData[0][dataKey]) ])
+                        .tickFormat(d3.format(".0f"));
+                } else { 
+                    yAxisOut.ticks(Y_NUM_TICKS_OUT);
+                }
+            }
+            
+            
+            // Add y axes to the plot and record the amount of horizontal space they occupy. 
+            // Compute padding according to actual space taken by y axis including ticks and labels. 
+           
+            var plotContainer = svg.append("g"), 
+                axisElement, 
+                result = {}, 
+                mainPlotArea;
+                
+            var yAxisPadding = 0;
+            
+            if(outlierData.length > 0) {
+                axisElement = plotContainer.append("g").attr("class", "y axis").call(yAxisOut);
+                yAxisPadding = Math.max(yAxisPadding, axisElement[0][0].getBBox().width);
+            }
+            
+            axisElement = plotContainer.append("g").attr("transform", "translate(0," + mainPlotOffset + ")")
+                .attr("class", "y axis").call(yAxis);
+            yAxisPadding = Math.max(yAxisPadding, axisElement[0][0].getBBox().width);
+            
+            // Padding for y axis has now been determined. Make corresponding adjustments. 
+            plotContainer.attr("transform", "translate(" + yAxisPadding + ", " + topPadding + ")");
+            plotWidth -= yAxisPadding;
+            
+            result["container"] = plotContainer;
+            
+            // Add group for main plot area. 
+            mainPlotArea = plotContainer.insert("g", ":first-child")
+                .attr("transform", "translate(" + 0 + ", " + mainPlotOffset + ")"); 
+                
+            // Add background colour.  
+            mainPlotArea.append("rect").attr("class", "plot-background")
+                .attr("width", plotWidth).attr("height", mainPlotHeight);
+            
+            // Add gridlines as a separate axis. 
+            mainPlotArea.append("g").attr("class", "gridlines")
+                .call(yAxis.tickSize(-plotWidth));
+                
+            result["main"] = mainPlotArea;
+                
+            // If have separate outlier plot, follow same steps to create subplot area. 
+            if(outlierData.length > 0) {
+                var outlierPlotArea = plotContainer.insert("g", ":first-child");
+                
+                // Add background and gridlines. 
+                outlierPlotArea.append("rect").attr("class", "plot-background")
+                    .attr("width", plotWidth).attr("height", outlierPlotHeight);
+                outlierPlotArea.append("g").attr("class", "gridlines")
+                    .call(yAxisOut.tickSize(-plotWidth));
+            
+                // Add dotted boundary separators. 
+                outlierPlotArea.append("line").attr("x1", 0).attr("y1", outlierPlotHeight)
+                    .attr("x2", plotWidth).attr("y2", outlierPlotHeight)
+                    .attr("class", "boundary");
+                mainPlotArea.append("line").attr("x1", 0).attr("y1", 0)
+                    .attr("x2", plotWidth).attr("y2", 0)
+                    .attr("class", "boundary");
+                    
+                result["outlier"] = outlierPlotArea;
+            }
+            
+            // Create x (date) scale and axis. 
+            
+            x = d3.time.scale().domain([ dateRange[0], d3.time.day(dateRange[1])])
+                .range([leftRightPadding, plotWidth - leftRightPadding]);
+            
+            // Compute the horizontal space per day. 
+            dayWidth = x(d3.time.day.offset(dateRange[0], 1)) - x(dateRange[0]);
+            
+            // Add date axes. 
+            var xAxis = d3.svg.axis().scale(x).orient("bottom");
+            
+            // Main axis should show only dates. 
+            mainPlotArea.append("g").attr("class", "date axis")
+                .attr("transform", "translate(0," + mainPlotHeight + ")")
+                .call(xAxis.tickFormat(d3.time.format("%d")));
+            
+            // Secondary axis should show months, including month of earliest day.  
+            var monthTicks = d3.time.months(dateRange[0], dateRange[1]);
+            monthTicks.push(dateRange[0]);
+            
+            mainPlotArea.append("g").attr("class", "month axis")
+                .attr("transform", "translate(0," + mainPlotHeight + ")")
+                .call(xAxis.tickValues(monthTicks).tickFormat(d3.time.format("%b"))
+                    .tickPadding(MONTH_TICK_PADDING));
+            
+            return result;    
+        };
       
        
         // Load the relevant data and display the Average plot. 
         // Data and computed values are not cached - data should refresh on each load. 
         function drawAveragePlot() {
-        
-            // Minimum height of y axis: 5 seconds 
-            var Y_MIN_HEIGHT = 5, 
-                // Desired number of ticks on the y axis 
-                Y_NUM_TICKS = 5,
-                // Desired number of ticks on the y axis for outliers
-                Y_NUM_TICKS_OUT = 2,
-                // Minimum number of dates on the x axis = 2 weeks 
-                X_MIN_DAYS = 14, 
-                // Padding to use to offset month labels
-                MONTH_TICK_PADDING = 15,
-                // Minimum point radius 
-                MIN_POINT_RAD = 2.5,  
-                // Maximum point radius 
-                MAX_POINT_RAD = 5, 
-                // Proportion of space allocated to a single day that the point radius should take
-                POINT_DAY_PROP = 0.5, 
-                // Proportion of plot height that should be dedicated to outliers, if any. 
-                OUTLIER_PLOT_PROP = 0.25;
-            
-                  
-            // Initialize a new plot container. 
-            var svg = newPlot(); 
             
             // Load data. 
             var graphData = getGraphData(true);
@@ -442,13 +518,16 @@ $(function() {
             // Dates are interpreted as midnight GMT. Change to midnight local time for display purposes. 
             graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
             
+         
         /** Not in v1: 
         
             if(graphData.length > 0 && graphData.some(function(d) { return d.crashCount > 0; })) {
                 // Adjust space to accomodate crash indicator, if necessary. 
-                mainPlotHeight -= crashHeight;
-            }
-            
+                crashHeight = CRASH_HEIGHT_DEFAULT;
+            } else { 
+        */      crashHeight = 0;
+        /*  }
+        
         */   
             
             // Extract startup time data. 
@@ -466,95 +545,26 @@ $(function() {
                 outlierIndices.forEach(function(d) { 
                     outlierData.push(startupData.splice(d, 1)[0]);
                 });
-                
-                // Adjust sizing variables to accomodate outlier plot. 
-                outlierPlotHeight = mainPlotHeight * OUTLIER_PLOT_PROP;
-                mainPlotOffset = outlierPlotHeight + outlierGap;
-                mainPlotHeight -= mainPlotOffset;
             }
             
-     
-        
-        
-            // Create y axis scales and axes. 
-            
-            var yAxis, yAxisOut;
-            
-            y = d3.scale.linear()
-                // Allocate space from 0 to maximum value in dataset. 
-                // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
-                .domain([ 0, 
-                    (startupData.length == 0) ? 
-                        Y_MIN_HEIGHT : 
-                        Math.max(Y_MIN_HEIGHT, d3.max(startupData, function(d) { 
-                            return d.medTime; 
-                        }))
-                ])
-                .range([mainPlotHeight, mainPlotTopPadding]); 
-            // Update scale to incorporate extra space at the top. 
-            y.domain([0, y.invert(0)]).range([mainPlotHeight, 0]);
-            
-            yAxis = d3.svg.axis().scale(y).orient("left").ticks(Y_NUM_TICKS);
-            
-            if(outlierData.length > 0) {
-                yOut = d3.scale.linear()
-                    // Domain should incorporate outlier values. 
-                    // If only a single outlier, pad domain. 
-                    .domain(outlierData.length > 1 ? d3.extent(outlierData, function(d) {
-                        return d.medTime; 
-                    }) : [ Math.floor(outlierData[0].medTime), Math.ceil(outlierData[0].medTime) ]
-                    ).range([ outlierPlotHeight - outlierPlotPadding, outlierPlotPadding ]); 
-                // Update scale to incorporate extra space at the top. 
-                yOut.domain([ yOut.invert(outlierPlotHeight), yOut.invert(0) ])
-                    .range([outlierPlotHeight, 0]);
-                    
-                yAxisOut = d3.svg.axis().scale(yOut).orient("left");
-                if(outlierData.length == 1) { 
-                    yAxisOut.tickValues([ Math.floor(outlierData[0].medTime), Math.ceil(outlierData[0].medTime) ])
-                        .tickFormat(d3.format(".0f"));
-                } else { 
-                    yAxisOut.ticks(Y_NUM_TICKS_OUT);
-                }
-            }
-            
-            
-            // Set up plotting area. 
-            // Need to do this before creating x axis to properly compute plot width. 
-            
-            // Render y axes to compute necessary padding, and set up background features. 
-            var plot = setUpPlotArea(svg, yAxis, yAxisOut);
-            
-            
-            // Set up scale for dates on x-axis. 
+            // Compute date range to include on the plot. 
             // If earliest date is less than two weeks ago, set to two weeks ago.
-            var earliest = (graphData.length == 0) ? 
-                d3.time.day(d3.time.day.offset(new Date(), -X_MIN_DAYS)) : 
-                new Date(Math.min(d3.time.day(d3.time.day.offset(new Date(), -X_MIN_DAYS)), 
-                    d3.min(graphData, function(d) { return d.date; })));
+            var today = new Date(), 
+                earliest = (graphData.length == 0) ? 
+                    d3.time.day(d3.time.day.offset(today, -X_MIN_DAYS)) : 
+                    new Date(Math.min(d3.time.day(d3.time.day.offset(today, -X_MIN_DAYS)), 
+                        d3.min(graphData, function(d) { return d.date; })));
+                
+            // Initialize plot. 
+            var plot = setUpPlotArea(
+                    startupData, 
+                    "medTime", 
+                    [ earliest, d3.time.day(today) ], 
+                    outlierData
+                );
+   
             
-            x = d3.time.scale()
-                // Allocate space from earliest date in the payload until today.
-                .domain([earliest, d3.time.day(new Date())])
-                .range([leftRightPadding, plotWidth - leftRightPadding]);
-            // Update scale to add padding on the left and right. 
-            x.domain([x.invert(0), x.invert(plotWidth)]).range([0, plotWidth]);
-            
-            // Compute the horizontal space per day. 
-            dayWidth = x(d3.time.day.offset(earliest, 1)) - x(earliest);
-            
-            // Add date axes. 
-            var xAxis = d3.svg.axis().scale(x).orient("bottom");
-            
-            // Main axis should show only dates. 
-            plot.main.append("g").attr("class", "date axis")
-                .attr("transform", "translate(0," + mainPlotHeight + ")")
-                .call(xAxis.tickFormat(d3.time.format("%d")));
-            // Secondary axis should show months.   
-            plot.main.append("g").attr("class", "month axis")
-                .attr("transform", "translate(0," + mainPlotHeight + ")")
-                .call(xAxis.ticks(d3.time.months).tickFormat(d3.time.format("%b"))
-                    .tickPadding(MONTH_TICK_PADDING));
-            
+            // Add update indicators. 
             if(graphData.length > 0) {
                 // Add indicators for version updates. 
                 var updateData = graphData.filter(function(d) { 
@@ -601,7 +611,7 @@ $(function() {
                     .attr("cy", function(d) { return y(d.medTime); });
             }
             
-            
+                
         /** Not in v1. 
         
             // Add crash indicators, if any.         
@@ -619,43 +629,23 @@ $(function() {
         // Load the relevant data and display the All plot. 
         // Data and computed values are not cached - data should refresh on each load. 
         function drawAllPlot() {
-            // Minimum height of y axis: 5 seconds 
-            var Y_MIN_HEIGHT = 5, 
-                // Desired number of ticks on the y axis 
-                Y_NUM_TICKS = 5,
-                // Desired number of ticks on the y axis for outliers
-                Y_NUM_TICKS_OUT = 2,
-                // Minimum number of dates on the x axis = 2 weeks 
-                X_MIN_DAYS = 14, 
-                // Padding to use to offset month labels
-                MONTH_TICK_PADDING = 15,
-                // Minimum point radius 
-                MIN_POINT_RAD = 2.5,  
-                // Maximum point radius 
-                MAX_POINT_RAD = 5, 
-                // Proportion of space allocated to a single day that the point radius should take
-                POINT_DAY_PROP = 0.5, 
-                // Proportion of plot height that should be dedicated to outliers, if any. 
-                OUTLIER_PLOT_PROP = 0.25;
-            
-            
-            // Initialize a new plot container. 
-            var svg = newPlot();
-            
+           
             // Load data. 
             var graphData = getGraphData(false);
             
             // Dates are interpreted as midnight GMT. Change to midnight local time for display purposes. 
             graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
             
-        /** Not in v1: 
+       /** Not in v1: 
         
             if(graphData.length > 0 && graphData.some(function(d) { return d.crashCount > 0; })) {
                 // Adjust space to accomodate crash indicator, if necessary. 
-                mainPlotHeight -= crashHeight;
-            }
-            
-        */  
+                crashHeight = CRASH_HEIGHT_DEFAULT;
+            } else { 
+        */      crashHeight = 0;
+        /*  }
+        
+        */   
             
             // Extract startup time data. 
             var startupData = [];
@@ -679,101 +669,25 @@ $(function() {
                 outlierIndices.forEach(function(d) { 
                     outlierData.push(startupData.splice(d, 1)[0]);
                 });
-                
-                // Adjust sizing variables to accomodate outlier plot. 
-                outlierPlotHeight = mainPlotHeight * OUTLIER_PLOT_PROP;
-                mainPlotOffset = outlierPlotHeight + outlierGap;
-                mainPlotHeight -= mainPlotOffset;
             }
             
-            // Create y axis scales and axes. 
-            
-            var yAxis, yAxisOut;
-            
-            y = d3.scale.linear()
-                // Allocate space from 0 to maximum value in dataset. 
-                // If maximum value is less than Y_MIN_HEIGHT, extend to Y_MIN_HEIGHT. 
-                .domain([ 0, 
-                    (startupData.length == 0) ? 
-                        Y_MIN_HEIGHT : 
-                        Math.max(Y_MIN_HEIGHT, d3.max(startupData, function(d) { 
-                            return d.value; 
-                        }))
-                ])
-                .range([mainPlotHeight, mainPlotTopPadding]); 
-            // Update scale to incorporate extra space at the top. 
-            y.domain([0, y.invert(0)]).range([mainPlotHeight, 0]);
-            
-            yAxis = d3.svg.axis().scale(y).orient("left").ticks(Y_NUM_TICKS);
-            
-            if(outlierData.length > 0) {
-                yOut = d3.scale.linear()
-                    // Domain should incorporate outlier values. 
-                    // If only a single outlier, pad domain. 
-                    .domain(outlierData.length > 1 ? d3.extent(outlierData, function(d) {
-                        return d.value; 
-                    }) : [ Math.floor(outlierData[0].value), Math.ceil(outlierData[0].value) ]
-                    ).range([ outlierPlotHeight - outlierPlotPadding, outlierPlotPadding ]); 
-                // Update scale to incorporate extra space at the top. 
-                yOut.domain([ yOut.invert(outlierPlotHeight), yOut.invert(0) ])
-                    .range([outlierPlotHeight, 0]);
-                    
-                yAxisOut = d3.svg.axis().scale(yOut).orient("left");
-                if(outlierData.length == 1) { 
-                    yAxisOut.tickValues([ Math.floor(outlierData[0].value), Math.ceil(outlierData[0].value) ])
-                        .tickFormat(d3.format(".0f"));
-                } else { 
-                    yAxisOut.ticks(Y_NUM_TICKS_OUT);
-                }
-            }
-            
-            
-            // Set up plotting area. 
-            // Need to do this before creating x axis to properly compute plot width. 
-            
-            // Render y axes to compute necessary padding, and set up background features. 
-            var plot = setUpPlotArea(svg, yAxis, yAxisOut);
-            
-            
-            // Set up scale for dates on x-axis. 
+            // Compute date range to include on the plot. 
             // If earliest date is less than two weeks ago, set to two weeks ago.
             var today = new Date(), 
                 earliest = (graphData.length == 0) ? 
                     d3.time.day(d3.time.day.offset(today, -X_MIN_DAYS)) : 
                     new Date(Math.min(d3.time.day(d3.time.day.offset(today, -X_MIN_DAYS)), 
                         d3.min(graphData, function(d) { return d.date; })));
-             
-            x = d3.time.scale()
-                // Allocate space from earliest date in the payload until today.
-                .domain([earliest, d3.time.day(today)])
-                .range([leftRightPadding, plotWidth - leftRightPadding]);
-            // Update scale to add padding on the left and right. 
-            x.domain([x.invert(0), x.invert(plotWidth)]).range([0, plotWidth]);
-            
-            // Compute the horizontal space per day. 
-            dayWidth = x(d3.time.day.offset(earliest, 1)) - x(earliest);
-            
-            // Add date axes. 
-            var xAxis = d3.svg.axis().scale(x).orient("bottom");
-            var xDomain = x.domain();
-            
-            // Main axis should show only dates. 
-            plot.main.append("g").attr("class", "date axis")
-                .attr("transform", "translate(0," + mainPlotHeight + ")")
-                .call(xAxis.tickFormat(d3.time.format("%d")));
-            
-            // Secondary axis should show months, including month of earliest day.  
-            var monthTicks = d3.time.months(earliest, today);
-            monthTicks.push(earliest);
-            
-            plot.main.append("g").attr("class", "month axis")
-                .attr("transform", "translate(0," + mainPlotHeight + ")")
-                .call(xAxis
-                    // .ticks(d3.time.months)
-                    .tickValues(monthTicks)
-                    .tickFormat(d3.time.format("%b"))
-                    .tickPadding(MONTH_TICK_PADDING));
-            
+                
+            // Initialize plot. 
+            var plot = setUpPlotArea(
+                    startupData, 
+                    "value", 
+                    [ earliest, d3.time.day(today) ], 
+                    outlierData
+                );
+   
+   
             
             if(graphData.length > 0) {
                 // Add indicators for version updates. 
