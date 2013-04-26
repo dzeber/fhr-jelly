@@ -442,14 +442,14 @@ $(function() {
             // Dates are interpreted as midnight GMT. Change to midnight local time for display purposes. 
             graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
             
-        // /** Not in v1: 
+        /** Not in v1: 
         
             if(graphData.length > 0 && graphData.some(function(d) { return d.crashCount > 0; })) {
                 // Adjust space to accomodate crash indicator, if necessary. 
                 mainPlotHeight -= crashHeight;
             }
             
-        // */   
+        */   
             
             // Extract startup time data. 
             // Remove dates with medTime undefined or null (means that there was no sessions startups for that day). 
@@ -554,7 +554,6 @@ $(function() {
                 .attr("transform", "translate(0," + mainPlotHeight + ")")
                 .call(xAxis.ticks(d3.time.months).tickFormat(d3.time.format("%b"))
                     .tickPadding(MONTH_TICK_PADDING));
-           
             
             if(graphData.length > 0) {
                 // Add indicators for version updates. 
@@ -566,7 +565,7 @@ $(function() {
                 }
                 
                 
-            // /** Not in v1
+            /** Not in v1
             
                 // Add indicators for build updates. 
                 // Don't include dates with major version updates. 
@@ -579,7 +578,7 @@ $(function() {
                     drawBuildUpdates(updateData, plot.main);
                 }
                 
-            // */
+            */
             
             }
             
@@ -603,7 +602,7 @@ $(function() {
             }
             
             
-        // /** Not in v1. 
+        /** Not in v1. 
         
             // Add crash indicators, if any.         
             if(graphData.length > 0) {
@@ -613,7 +612,7 @@ $(function() {
                 }
             }
             
-        // */
+        */
                
         }
         
@@ -649,14 +648,14 @@ $(function() {
             // Dates are interpreted as midnight GMT. Change to midnight local time for display purposes. 
             graphData.forEach(function(d) { d.date = d3.time.day(d.date); });
             
-        // /** Not in v1: 
+        /** Not in v1: 
         
             if(graphData.length > 0 && graphData.some(function(d) { return d.crashCount > 0; })) {
                 // Adjust space to accomodate crash indicator, if necessary. 
                 mainPlotHeight -= crashHeight;
             }
             
-        // */  
+        */  
             
             // Extract startup time data. 
             var startupData = [];
@@ -738,14 +737,15 @@ $(function() {
             
             // Set up scale for dates on x-axis. 
             // If earliest date is less than two weeks ago, set to two weeks ago.
-            var earliest = (graphData.length == 0) ? 
-                d3.time.day(d3.time.day.offset(new Date(), -X_MIN_DAYS)) : 
-                new Date(Math.min(d3.time.day(d3.time.day.offset(new Date(), -X_MIN_DAYS)), 
-                    d3.min(graphData, function(d) { return d.date; })));
-            
+            var today = new Date(), 
+                earliest = (graphData.length == 0) ? 
+                    d3.time.day(d3.time.day.offset(today, -X_MIN_DAYS)) : 
+                    new Date(Math.min(d3.time.day(d3.time.day.offset(today, -X_MIN_DAYS)), 
+                        d3.min(graphData, function(d) { return d.date; })));
+             
             x = d3.time.scale()
                 // Allocate space from earliest date in the payload until today.
-                .domain([earliest, d3.time.day(new Date())])
+                .domain([earliest, d3.time.day(today)])
                 .range([leftRightPadding, plotWidth - leftRightPadding]);
             // Update scale to add padding on the left and right. 
             x.domain([x.invert(0), x.invert(plotWidth)]).range([0, plotWidth]);
@@ -755,15 +755,23 @@ $(function() {
             
             // Add date axes. 
             var xAxis = d3.svg.axis().scale(x).orient("bottom");
+            var xDomain = x.domain();
             
             // Main axis should show only dates. 
             plot.main.append("g").attr("class", "date axis")
                 .attr("transform", "translate(0," + mainPlotHeight + ")")
                 .call(xAxis.tickFormat(d3.time.format("%d")));
-            // Secondary axis should show months.   
+            
+            // Secondary axis should show months, including month of earliest day.  
+            var monthTicks = d3.time.months(earliest, today);
+            monthTicks.push(earliest);
+            
             plot.main.append("g").attr("class", "month axis")
                 .attr("transform", "translate(0," + mainPlotHeight + ")")
-                .call(xAxis.ticks(d3.time.months).tickFormat(d3.time.format("%b"))
+                .call(xAxis
+                    // .ticks(d3.time.months)
+                    .tickValues(monthTicks)
+                    .tickFormat(d3.time.format("%b"))
                     .tickPadding(MONTH_TICK_PADDING));
             
             
@@ -777,7 +785,7 @@ $(function() {
                 }
                 
                 
-            // /** Not in v1
+            /** Not in v1
             
                 // Add indicators for build updates. 
                 // Don't include dates with major version updates. 
@@ -790,7 +798,7 @@ $(function() {
                     drawBuildUpdates(updateData, plot.main);
                 }
                 
-            // */
+            */
             
             }
             
@@ -815,7 +823,7 @@ $(function() {
             }
             
             
-        // /** Not in v1. 
+        /** Not in v1. 
         
             // Add crash indicators, if any.         
             if(graphData.length > 0) {
@@ -825,7 +833,7 @@ $(function() {
                 }
             }
             
-        // */
+        */
                
         
         }
