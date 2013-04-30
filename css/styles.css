@@ -530,7 +530,9 @@ figcaption {
     font-size: 10px;
 }
 .date.axis path, .month.axis path {
-	display: none;
+	display: none; 
+    /* fill: none;
+	stroke: black; */
 }
 .month.axis line {
     display: none;
@@ -568,9 +570,10 @@ figcaption {
 }
 .startup-point {
 	fill: #458b74; 
+    stroke: #737373; 
 }
 .all {
-	fill: #458b74; 
+	opacity: 0.75;
 }
 .plot-background {
 	fill: #e5e5e5; 
