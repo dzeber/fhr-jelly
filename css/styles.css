@@ -195,9 +195,14 @@ h3 {
   position: absolute;
   top: 20px;
   right: 10%;
-  width: 150px;
+  min-width: 150px;
   height: 100px;
-  cursor: default;
+  cursor: pointer;
+  z-index: 100;
+}
+.activationTrigger {
+  overflow: visible;
+  z-index: 100;
 }
 .activationTextContainer {
     float: left;
@@ -590,15 +595,18 @@ figcaption {
   left: -164px;
   top: 60px;
   width: 300px;
+  height: 0;
   z-index: 200;
   opacity: 0;
+  overflow: hidden;
   transform: translateY(-20px);
   transition-duration: 500ms;
   transition-delay: 250ms;
-  pointer-events: none;
 }
 
 .panelContainer.toggled {
+  height: auto;
+  overflow: visible;
   transform: translateY(0);
   opacity: 1;
 }
@@ -683,6 +691,11 @@ tr:nth-child(odd) td {
     height: 1px;
     width: 1px;
     overflow: hidden;
+}
+.loading {
+    position: absolute;
+    top: 35%;
+    left: 50%;
 }
 
 @media only screen and (max-width: 768px) {

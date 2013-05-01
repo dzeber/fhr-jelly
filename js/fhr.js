@@ -1,11 +1,15 @@
 $(function() {
 
+    // Hide the loading animation as soon as the DOM is ready.
+    $('.loading').hide();
+
     var navListItems = $('.nav li'),
         rawTabs = $('#raw_selector').find('li a'),
         navItems = navListItems.find('a'),
         contentContainers = $('.mainContent'),
         rawContentContainers = $('.rawdata-display'),
-        rawHeadings = $('.raw_heading');
+        rawHeadings = $('.raw_heading'),
+        newTab = $('.newtab');
 
     var showContainer = function(anchor) {
         // Get the id of the container to show from the href.
@@ -14,6 +18,13 @@ $(function() {
 
         container.show();
     };
+
+    newTab.click(function(event) {
+        var url = $(this).attr('href');
+        event.preventDefault();
+
+        window.open(url);
+    });
 
     // Handle clicks on the main presistent header
     navItems.click(function(event) {
@@ -78,7 +89,7 @@ $(function() {
     // before it is ready.
     (function waitForPayload() {
         if(payload) {
-            showTipboxes();
+            showTipboxes(payload);
             return;
         }
         waitr = setTimeout(waitForPayload, 500);
@@ -853,8 +864,12 @@ $(function() {
     });
 
     // Conditionally show tip boxes
-    function showTipboxes() {
+    function showTipboxes(payload) {
         clearTimeout(waitr);
+
+        if(payload.data.last['org.mozilla.appInfo.appinfo'].locale === 'en-US') {
+            $('#survey').show();
+        }
 
         // User has a crashy browser
         if(getTotalNumberOfCrashes('week') > 5) {
